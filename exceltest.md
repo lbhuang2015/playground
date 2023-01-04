@@ -1,10 +1,10 @@
 ExcelMultipleTablesSelect
 ```vba
-Public Function ExcelToJSONS(rng1 As Range, rng2 As Range, rng3 As Range) As String
+Public Function TablesToJSONS(rng1 As Range, rng2 As Range, rng3 As Range) As String
     ' Dim json1, json2, json3 As String
-    ExcelToJSONS = "{" & ExcelToJSON(rng1) & ExcelToJSON(rng2) & ExcelToJSON(rng3) & "}"
+    TablesToJSONS = "{" & TableToJSON(rng1) & TableToJSON(rng2) & TableToJSON(rng3) & "}"
 End Function
-Public Function ExcelToJSON(rng As Range) As String
+Public Function TableToJSON(rng As Range) As String
     ' Check there must be at least two columns in the Excel file
     If rng.Columns.Count < 2 Then
         ExcelToJSON = CVErr(xlErrNA)
@@ -36,6 +36,6 @@ Public Function ExcelToJSON(rng As Range) As String
     ' Strip out the last comma in last row of the Excel data
     JSON = Left(JSON, Len(JSON) - 1)
     JSON = JSON & "}"
-    ExcelToJSON = JSON
+    TableToJSON = JSON
 End Function
 ```
