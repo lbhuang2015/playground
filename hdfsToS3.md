@@ -539,3 +539,104 @@ class S3Service @Autowired()(s3Config: S3Config) {
 ```
 
 这样，就可以使用`@ConfigurationProperties`注解来读取配置文件中的属性值，使代码更加简洁和易于维护。
+
+## 3. distcp
+
+可以使用Hadoop的distcp工具，它支持在Hadoop集群之间复制大量数据，而无需将数据复制到客户端。在这种情况下，数据在集群中流动，而不是通过客户端。可以使用类似以下命令将数据从HDFS复制到S3：
+
+```
+phpCopy code
+hadoop distcp hdfs://<hdfs-hostname>:<port>/<hdfs-path> s3a://<s3-bucket>/<s3-path>
+```
+
+需要将 `<hdfs-hostname>`，`<port>`，`<hdfs-path>`，`<s3-bucket>` 和 `<s3-path>` 替换为相应的值。注意，需要在Hadoop集群中安装S3A文件系统以便使用S3作为目标。
+
+若HDFS已经安装了S3相关支持，可以使用Hadoop S3A Connector来实现从HDFS直接拷贝文件到S3系统，无需经过程序所在服务器内存。
+
+以下是一个基于Scala和Hadoop S3A Connector的示例代码：
+
+```scala
+scalaCopy code
+import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.s3a.S3AFileSystem
+
+import java.security.MessageDigest
+import java.util.Base64
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
+import scala.util.{Failure, Success}
+
+object HdfsToS3DirectCopy {
+  val hdfsUri = "hdfs://your-hdfs-uri"
+  val s3Endpoint = "your-s3-endpoint"
+  val s3AccessKey = "your-s3-access-key"
+  val s3SecretKey = "your-s3-secret-key"
+  val s3Bucket = "your-s3-bucket"
+
+  def main(args: Array[String]): Unit = {
+    val hdfsPath = new Path("/path/to/hdfs/file")
+    val s3Path = new Path(s"s3a://$s3Bucket/path/to/s3/file")
+
+    val fs = FileSystem.get(new java.net.URI(hdfsUri), new org.apache.hadoop.conf.Configuration())
+
+    val hdfsInputStream = fs.open(hdfsPath)
+    val s3FileSystem = new S3AFileSystem()
+    s3FileSystem.initialize(new java.net.URI(s3Endpoint), fs.getConf)
+
+    val s3OutputStream = s3FileSystem.create(s3Path)
+
+    // 将hdfs文件流写入s3文件流
+    hdfsInputStream.transferTo(s3OutputStream)
+
+    // 关闭文件流
+    hdfsInputStream.close()
+    s3OutputStream.close()
+
+    // 获取文件MD5值并比较
+    val hdfsMd5Future = Future { getFileMd5(hdfsPath, fs) }
+    val s3Md5Future = Future { getFileMd5(s3Path, s3FileSystem) }
+
+    val compareResultFuture = for {
+      hdfsMd5 <- hdfsMd5Future
+      s3Md5 <- s3Md5Future
+    } yield compareMd5s(hdfsMd5, s3Md5)
+
+    compareResultFuture.onComplete {
+      case Success(compareResult) =>
+        if (compareResult) {
+          println("File transfer and MD5 check succeed!")
+        } else {
+          println("MD5 check failed!")
+        }
+      case Failure(exception) => println(s"Error occurred: ${exception.getMessage}")
+    }
+
+    // 关闭文件系统连接
+    fs.close()
+    s3FileSystem.close()
+  }
+
+  def getFileMd5(path: Path, fs: FileSystem): String = {
+    val inputStream = fs.open(path)
+    val md5Digest = MessageDigest.getInstance("MD5")
+    val buffer = new Array[Byte](1024 * 1024)
+
+    Stream
+      .continually(inputStream.read(buffer))
+      .takeWhile(_ != -1)
+      .foreach(md5Digest.update(buffer, 0, _))
+
+    inputStream.close()
+
+    Base64.getEncoder.encodeToString(md5Digest.digest())
+  }
+
+  def compareMd5s(md5A: String, md5B: String): Boolean = {
+    md5A.equals(md5B)
+  }
+}
+```
+
+其中，使用了`org.apache.hadoop.fs.s3a.S3AFileSystem`来实现S3文件系统的连接和文件操作，并且利用`Future`实现异步操作。
+
