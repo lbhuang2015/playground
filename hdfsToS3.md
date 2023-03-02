@@ -640,3 +640,59 @@ object HdfsToS3DirectCopy {
 
 其中，使用了`org.apache.hadoop.fs.s3a.S3AFileSystem`来实现S3文件系统的连接和文件操作，并且利用`Future`实现异步操作。
 
+以下代码：
+
+```scala
+import java.io.File
+import java.util.concurrent.Executors
+import scala.concurrent.ExecutionContext
+import scala.concurrent.Future
+import scala.async.Async.{async, await}
+import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
+import com.amazonaws.services.s3.AmazonS3ClientBuilder
+import org.apache.hadoop.fs.FileStatus
+import org.apache.hadoop.fs.FileSystem
+import org.apache.log4j.Logger
+
+def uploadFilesToS3(fileStatusList: List[FileStatus], s3Bucket: String, s3Prefix: String): List[(String, Boolean)] = {
+  // 创建 Hadoop 配置对象
+  val hadoopConf = new org.apache.hadoop.conf.Configuration()
+
+  // 创建 Hadoop 文件系统对象
+  val hdfs = FileSystem.get(hadoopConf)
+
+  // 创建 Amazon S3 客户端对象
+  val s3Client = AmazonS3ClientBuilder.standard()
+    .withCredentials(DefaultAWSCredentialsProviderChain.getInstance())
+    .build()
+
+  // 创建线程池和执行上下文对象
+  val threadPool = Executors.newFixedThreadPool(Runtime.getRuntime.availableProcessors())
+  implicit val ec = ExecutionContext.fromExecutor(threadPool)
+
+  // 使用 Future 和 async/await 机制上传文件
+  val futureList = fileStatusList.map { fileStatus =>
+    async {
+      val hdfsPath = fileStatus.getPath.toString
+      val s3Key = s3Prefix + fileStatus.getPath.getName
+      try {
+        s3Client.putObject(s3Bucket, s3Key, new File(hdfsPath))
+        Logger.getLogger(getClass).info(s"Copied file $hdfsPath to S3 bucket $s3Bucket with key $s3Key")
+        (fileStatus.getPath.getName, true)
+      } catch {
+        case ex: Exception =>
+          Logger.getLogger(getClass).error(s"Failed to copy file $hdfsPath to S3 bucket $s3Bucket with key $s3Key: ${ex.getMessage}")
+          (fileStatus.getPath.getName, false)
+      }
+    }
+  }
+
+  // 等待所有 Future 完成，并返回结果列表
+  val resultList = await(Future.sequence(futureList))
+
+  // 关闭线程池
+  threadPool.shutdown()
+
+  resultList
+}
+```
