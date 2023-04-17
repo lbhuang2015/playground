@@ -698,7 +698,7 @@ def uploadFilesToS3(fileStatusList: List[FileStatus], s3Bucket: String, s3Prefix
 ```
 以下是一个使用org.apache.hadoop.tools.DistCpOptions上传文件从HDFS到S3兼容系统的Java示例代码：
 
-'''java
+```java
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -727,7 +727,8 @@ public class HdfsToS3DistCp {
         distCp.execute(new Path[]{srcPath, destPath});
     }
 }
-'''
+
+```
 在这个示例代码中，我们使用了org.apache.hadoop.tools.DistCp类来执行文件拷贝操作，并使用org.apache.hadoop.tools.DistCpOptions类来设置拷贝选项。在选项中，我们开启了同步文件夹、覆盖目标文件、删除目标中不存在的文件等选项，以保证文件拷贝的准确性和完整性。
 
 要注意的是，S3是一个分布式存储系统，与HDFS有所不同，需要使用特定的S3文件系统实现。在示例代码中，我们使用了S3A文件系统实现，可以通过hadoop-aws依赖包引入。在使用S3A文件系统时，需要在core-site.xml中配置S3的访问密钥和密钥ID，具体可以参考Apache Hadoop官方文档。
@@ -742,7 +743,7 @@ public class HdfsToS3DistCp {
 
 以下是一个使用Scala编写的示例代码，实现了从HDFS上传文件到S3兼容系统，并加入了Content-MD5检验的功能：
 
-'''scala
+```scala
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.tools.{DistCp, DistCpOptions}
@@ -808,7 +809,8 @@ object HdfsToS3DistCp {
     })
   }
 }
-'''
+
+```
 在这个示例代码中，我们添加了Content-MD5检验功能，用于验证上传到S3兼容系统中的文件是否完整和正确。在检验之前，我们遍历了HDFS上的文件列表，计算出每个文件的MD5哈希值，并将其存储在一个Map中。然后，在执行DistCp上传操作后，我们遍历上传结果，验证每个文件的Content-MD5是否与预期的MD5哈希值一致。
 
 需要注意的是，在验证Content-MD5时，我们使用了Hadoop提供的org.apache.hadoop.io.MD5Hash类来计算哈希值，而非Java原生的java.security.MessageDigest类。这是因为Hadoop的MD5哈希值与Java的
