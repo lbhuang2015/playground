@@ -37,6 +37,7 @@ mvn -T 1C install -pl $moduleName -am --offline
 #offline build (using local repo)
 ```
 
+<<<<<<< HEAD
 # 一、processDRCNonSecEodcFeeds
 
 ## 1. 取出并过滤配置ValuationMeasureDataset
@@ -387,3 +388,51 @@ posPDAssetValJoinDFForIndexDF.union(posPDValJoinDFNonIndex.selectExpr(posPDAsset
 
 只是取出结果集ECPT_DATA_MAP加入到rdlSparkContext中备用
 
+
+
+
+Hive SQL
+
+```sql
+现在有一张hive表filtered_table，其中包含eodpositionid, assetconstituentrecordid,tagmeasure,fallbacktype,fallbackjtdlevel,riskweightscaledjtd,effdate,version字段，
+riskweightscaledjtd字段为double类型，其余为string类型；
+fallbackjtdlevel的值可以为null或者P，或者C；
+针对该表，编写一个hql来创建一个hive view，view要包含原表中所有列，并且增加一个新列max_sum，同时满足如下要求：
+（1）首先筛选出fallbacktype等于”Unrecognized Tier1“或者”Unrecognized Tier2“的所有记录
+  （1.1）针对筛选出的记录，通过相同的epodpositionid，effdate，version和tagmeasure进行分组，
+  （1.2）对于分组内的记录，如果所有记录的fallbackjtdlevel列都等于C，则对分组内所有记录的riskweightscaledjtd列求和
+  （1.3）如果分组内有任意一条记录的fallbackjtdlevel列不等于C，则分组内所有记录的riskweightscaledjtd列取最大值
+  （1.4）把通过步骤1.2或者1.3得到的求和值或者最大值存入view的新列max_sum中
+（2）针对不满足fallbacktype等于”Unrecognized Tier1“或者”Unrecognized Tier2“的记录，新列max_sum的值为空
+
+一个hive Sql，返回表中每条记录的所有字段，并在其后增加名为max_sum的新字段存储前面求和或者求max所得的值，表中不满足fallbacktype满足”Unrecognized Tier1“或者”Unrecognized Tier2“的记录，max_sum的值为空
+
+select eodpositionid, assetconstituentrecordid,tagmeasure,fallbackjtdlevel,riskweightscaledjtd,version,max_sum from my_view_join where effdate='20231207' order by version,tagmeasure,eodpositionid,assetconstituentrecordid
+
+
+
+CREATE VIEW my_view_join AS
+SELECT 
+    ft.*,
+    grp.max_sum
+FROM 
+    filtered_table ft
+LEFT JOIN (
+    SELECT 
+        eodpositionid,
+        effdate,
+        version,
+        tagmeasure,
+        CASE 
+            WHEN COUNT(DISTINCT fallbackjtdlevel) = 1 AND MAX(fallbackjtdlevel) = 'C' THEN SUM(riskweightscaledjtd)
+            ELSE MAX(riskweightscaledjtd)
+        END AS max_sum
+    FROM 
+        filtered_table
+    GROUP BY 
+        eodpositionid, effdate, version, tagmeasure
+) grp ON ft.eodpositionid = grp.eodpositionid 
+       AND ft.effdate = grp.effdate 
+       AND ft.version = grp.version 
+       AND ft.tagmeasure = grp.tagmeasure;
+```
