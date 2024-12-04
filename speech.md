@@ -87,3 +87,47 @@ Ongoing Production Support
 Lastly, our ongoing production support includes addressing tech currency items for vulnerability remediation. We are committed to maintaining the highest standards of security and reliability in our systems. Our team works around the clock to ensure that any vulnerabilities are promptly identified and remediated, ensuring the integrity and security of our data and systems.
 
 These accomplishments reflect the hard work and dedication of our team. Through the FRTB project, we have significantly enhanced our ability to meet regulatory requirements and manage risk more effectively. We are committed to continuing our efforts and making further contributions to the company's compliance and risk management objectives.
+
+
+
+
+### Drive to Impact
+
+1. **Articulate a clear path through uncertainty**:
+   - When the technical stack is undecided, conducting a detailed analysis comparing different technologies and presents a clear decision-making path to the team, highlighting risks and benefits.
+2. **Act with speed and simplicity**:
+   - During a production outage, focusing on quickly identifying and fixing the root cause instead of optimizing non-critical areas of the code.
+3. **Focus resources on what matters most**:
+   - If a product needs to launch quickly, can focuse on developing key features based on user feedback, instead of spending time on secondary functionalities, following an agile methodology to prioritize tasks in sprints based on importance.
+
+
+
+### Adapt Quickly, Always Learn
+
+1. **Innovate with curiosity and purpose**:
+   - Can optimizing legacy code with new approaches, achieving a 20% even more improvement in runtime speed.
+2. **Experiment with a passion for learning**:
+   - Can Share findings with the team and implementing best practices based on experimentation.
+3. **Demonstrate flexibility**:
+   - Taking over tasks from another module during a team resource shortage, even when it falls outside my usual expertise, Learning the required skills quickly and completing the module within short time to ensure timely delivery.
+
+
+
+### Unlock the potential of our people
+
+1. **Inspire with humility, empathy, and inclusivity**:
+   - ensures everyone has the chance to speak, listens actively to feedback from junior developers or new hires, and acknowledges their contributions, regardless of their seniority.
+2. **Empower and coach to help others be their best**:
+   - pairs with a junior developer to guide them through solving a complex bug, explaining the technical and business logics and best practices rather than directly fixing the issue.This not only resolves the problem but also equips the junior developer with skills to handle similar challenges independently in the future.
+
+1. **Hold ourselves and others accountable**:
+   - Ensure that myown development tasks are completed on time and with high quality, help the team improve overall efficiency and project success through better planning processes.
+
+### Speak Up for the Good of Company
+
+1. **Debate with passion and act as one team**:
+   - During architecture design discussions, can share myown opinion and debates the best solution with the team while maintaining collaboration and respect.
+2. **Seek and include diverse perspectives**:
+   - Inviting members from other teams (e.g., BA, QA) to participate in implemention/dev test discussions to ensure the proposed solution/output addresses all business needs, Reduced requirement mismatches, shortening the development cycle.
+3. **Have the courage to challenge the status quo**:
+   - Proposing to abandon traditional object-oriented design patterns for specific business requirements and instead adopting a functional programming approach to fully leverage Spark’s distributed computing capabilities. For instance, using immutable data structures, higher-order functions, and Spark's built-in transformations instead of custom object-oriented logic.After implementing the functional programming approach, the pipeline execution time decreased, memory usage was optimized due to immutability, and the codebase became more concise and easier to debug, aligning with Spark's strengths in distributed and parallel processing.
