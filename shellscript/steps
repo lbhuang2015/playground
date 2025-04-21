@@ -1,0 +1,14 @@
+(1) backup
+nohup ./backup.sh '202502*' > run.log 2>&1 &
+nohup ./backup.sh '202503*' > run.log 2>&1 &
+(2) change the backup folder name to be same as table's path 
+hdfs dfs -mv /dev/sa/reference/curvatureshockindex /dev/sa/reference/curvatureshockindex_before
+hdfs dfs -mv /dev/sa/reference/curvatureshockindex_backup /dev/sa/reference/curvatureshockindex
+(3) create region in original folder
+nohup ./regioncreating.sh '202502*' > run.log 2>&1 &
+nohup ./regioncreating.sh '202503*' > run.log 2>&1 &
+(4) change the original folder name to be same as table's path
+hdfs dfs -mv /dev/sa/reference/curvatureshockindex /dev/sa/reference/curvatureshockindex_backup
+hdfs dfs -mv /dev/sa/reference/curvatureshockindex_bf /dev/sa/reference/curvatureshockindex
+(5) recreate table by hql for additional region partition
+(6) execute query from both beeline and spark-shell
