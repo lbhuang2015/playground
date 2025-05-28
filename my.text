@@ -34,3 +34,98 @@ In Spark, the smallest unit of parallelism is a task, which processes a partitio
 Thus, unless the structure within each heavy row is explicitly decomposed (e.g., flattening the tree into smaller rows), splitting the workload across jobs merely redistributes the bottlenecks — it does not eliminate them.
 
 Given that each row represents a complex tree structure, and that the subsequent enrichment process involves traversing the tree with highly intricate logic — possibly even traversing the tree multiple times due to chained processing — the time cost of this implementation is understandably significant, especially when the tree nodes contain massive amounts of issue data.
+
+
+# 🚨 Spark Performance Bottleneck Analysis & Solution Proposal
+
+## Problem Overview: Structural Load Imbalance in Row-Level Workloads
+
+In the current Spark implementation, **each RDD row represents a complete `IssuerRootNode` tree**, where:
+
+- Each row (family) is a full hierarchical structure.
+- Tree size varies dramatically: some trees have only a few layers, others span up to 285 levels.
+- Some nodes contain **tens of thousands of `issue[]` records**.
+- The downstream enrichment process **recursively traverses** all nodes and their associated `issuer` and `issues`, often **multiple times**.
+
+### 🔥 Consequences:
+
+- **Massive workload imbalance** between rows.
+- Spark treats each row as an atomic object — **unable to split or parallelize intra-row structures**.
+- Severe **long-tail tasks**:
+  - Some tasks finish in seconds.
+  - Others take over 10 minutes or crash due to resource exhaustion.
+
+---
+
+## ❌ What Doesn’t Work
+
+| Approach                   | Why It Fails                                                 |
+| -------------------------- | ------------------------------------------------------------ |
+| `repartition` / `coalesce` | Cannot break apart a single tree — each row is logically indivisible |
+| `salting`                  | Only spreads keys, but the tree (value) remains monolithic   |
+| `cache()`                  | Cannot solve CPU-time imbalance caused by huge rows          |
+| `mapPartitions` tuning     | Granularity changes, but large trees still dominate partition time |
+| Submitting multiple jobs   | Heavy rows still exist and remain slow — the root bottleneck persists |
+
+---
+
+## ✅ Root Cause
+
+> The fundamental issue is **row-level complexity**: Spark’s execution engine is designed for parallel processing of flat, uniform rows — **not for deeply nested, recursive structures embedded in single records**.
+
+---
+
+## ✅ Solution: Flatten the Tree – Adopt Matrix-Style Data Modeling
+
+To leverage Spark’s strengths (parallel row processing, columnar optimization, vectorized execution), we must **redesign the data model**:
+
+### 🔁 Restructure: Tree → Tables
+
+| From                                 | To                                                      |
+| ------------------------------------ | ------------------------------------------------------- |
+| `RDD<IssuerRootNode>` (per-row tree) | `RDD<NodeRow>`, `RDD<IssueRow>` (per-node or per-issue) |
+
+### 🧱 Suggested Flat Structures:
+
+1. **Node Table**  
+   `node_id`, `parent_id`, `level`, `family`, `is_issuer`, etc.
+
+2. **Issue Table**  
+   `node_id`, `issue_id`, `issue_meta...`
+
+3. *(Optional)* **Edge Table**  
+   `parent_id`, `child_id`, `family`
+
+---
+
+## ⚙️ Enrichment: Rewrite As SQL / DataFrame Operations
+
+Use standard Spark operations for logic that was previously tree-recursive:
+
+- `filter`: to extract nodes by type
+- `join`: to link nodes with their issues
+- `groupBy family`: to perform aggregations
+- `window functions`: for ordered traversals or scoring
+
+This makes the logic:
+
+- **Highly parallelizable**
+- **Cache-aware**
+- **Easy to optimize and scale**
+
+---
+
+## 🚀 Benefits of Flattened Modeling
+
+| Tree-Based Model                            | Flattened Model                                    |
+| ------------------------------------------- | -------------------------------------------------- |
+| Recursive, stateful traversal               | Stateless parallel row processing                  |
+| Long-tail tasks dominate execution time     | Uniform workload across tasks                      |
+| Difficult to cache or partition efficiently | Leverages Spark’s optimizer and columnar execution |
+| Hard to monitor or profile deeply           | Easier to trace and debug at row-level granularity |
+
+---
+
+## ✅ Summary
+
+To achieve significant runtime improvement and eliminate long-tail performance issues, the system must shift from a **"one row = one complex tree"** paradigm to a **flat, table-based data model**. By treating nodes and issues as individual records, we unlock Spark’s full potential for distributed, scalable, and efficient data processing.
