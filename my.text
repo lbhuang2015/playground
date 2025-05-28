@@ -1,1 +1,36 @@
-test
+This issue is a severe performance bottleneck caused by “intra-record structural load imbalance” during Spark processing. It cannot be resolved through simple repartition or salting strategies. The root cause lies in the following:
+
+Each RDD row (i.e., each family) represents a complete tree structure, and the structure itself introduces significant workload variation within a single row, leading to severe long-tail tasks in Spark stages.
+
+Each RDD row is a tree (IssuerRootNode), corresponding to a family;
+
+Some trees are shallow, with only a few hundred nodes;
+
+Others are extremely large — up to 285 levels deep, with some nodes containing over 10,000 issues[];
+
+The downstream computation recursively traverses all nodes in the tree → accessing both the issuer and issues[] of each node;
+
+As a result:
+
+Some tasks complete in under 10 seconds;
+
+Others may take 10 minutes or more, even causing executor failures.
+
+The following approaches do not improve performance:
+Strategy	Limitation
+repartition / coalesce	Cannot break up a tree — each row is a complete family and cannot be logically split
+salting	Only works for spreading keys, but not splitting a single value (tree)
+caching	Doesn't address uneven CPU time across tasks
+mapPartitions fine-tuning	Cannot prevent large trees from slowing down the entire partition
+
+Certainly — here's a clear and technical English explanation of why distributing heavy records across multiple Spark jobs doesn't significantly improve performance:
+
+Distributing the workload across multiple Spark jobs does not yield significant performance improvement when the root cause is intra-record workload imbalance.
+
+This is because the heavy records — for example, rows containing extremely large tree structures — still exist in each job. No matter how the job is split, any task assigned to process such a record will still experience long execution time, due to the inherently high computational cost of that single row.
+
+In Spark, the smallest unit of parallelism is a task, which processes a partition of rows. However, Spark treats each row as an atomic object — it does not internally decompose a single large object (e.g., a deep or wide tree) into smaller parallelizable units. As a result, if one row contains a disproportionately large amount of data or complex structure, the task processing that row becomes a bottleneck, regardless of how many jobs or partitions you create.
+
+Thus, unless the structure within each heavy row is explicitly decomposed (e.g., flattening the tree into smaller rows), splitting the workload across jobs merely redistributes the bottlenecks — it does not eliminate them.
+
+Given that each row represents a complex tree structure, and that the subsequent enrichment process involves traversing the tree with highly intricate logic — possibly even traversing the tree multiple times due to chained processing — the time cost of this implementation is understandably significant, especially when the tree nodes contain massive amounts of issue data.
