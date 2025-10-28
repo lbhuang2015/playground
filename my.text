@@ -1,9 +1,45 @@
-After the business logic processing, the upstream data became skewed or locally aggregated (most of the keys are concentrated in a single partition).
-Since coalesce() does not perform a shuffle, it only merges existing partitions without redistributing the data, resulting in uneven file sizes and more localized data similarity.
+Goal:
+Demonstrated strong ownership and technical leadership by refactoring the FCS data processing workflow to dynamically generate FCS data based on real-time SRDR updates across different regions. Enhanced the RDL EDOC processing module to ensure that the latest FCS data is consistently used to enrich EODc data for multiple regional feeds.
 
-The Snappy compression algorithm we are using is highly dependent on the local similarity of data.
-Unlike repartition, which randomizes the data, coalesce preserves the natural distribution of the upstream data.
-This means that in some Parquet files, consecutive column values are very similar, which significantly improves Snappy’s compression efficiency.
+Description:
+Completed the feature development and successfully deployed to the production environment ahead of schedule. Conducted comprehensive requirement analysis and delivered a stable, high-quality implementation with minimal defects, greatly reducing QA workload. The solution fully met user requirements, improved cross-regional data consistency, and enhanced overall system reliability and maintainability.
 
-As a result, the overall file size decreases due to enhanced local compressibility and reduced metadata overhead — this is normal.
-Therefore, a reduction in file size and count alone does not necessarily indicate data loss; the actual data content must be verified to confirm completeness.
+Goal:
+The existing FCS processing workflow consumed excessive Spark cluster resources, with each run taking seven to eight hours and often failing, causing re-runs and delays to downstream processes. The goal was to optimize the FCS processing to significantly reduce runtime and ensure the overall FRTB workflow meets its SLA requirements.
+
+Description:
+Successfully refactored the FCS enrichment logic and optimized Spark resource utilization, achieving a major performance improvement. The FCS processing time (excluding the MDSS part) was reduced from seven hours to 2.5 hours — a 60% reduction in runtime. by adopting a more efficient partitioning strategy, storage usage was also reduced by 60%, leading to an overall 15% reduction in daily storage consumption across the RDL system. The optimization was completed successfully and far exceeded the original performance targets, ensuring higher system stability and throughput.In addition, by accounting for both production and non-production executions, the optimization reduces more than eight hours of compute resource usage per day, translating into an estimated CAD 90K~100K in annual infrastructure cost savings. Overall，the optimization not only improved overall system efficiency but also delivered tangible financial benefits.
+
+Goal：
+
+The current EODC data enrichment process, similar to FCS, is highly time/resouces-consuming. By optimizing the DRC data processing workflow and distributing the SOPHIS_NA DRC, SBA, and RRAO processes across different servers, to improve data processing efficiency, reduce runtime, and ensure compliance with SLA requirements.
+
+description
+
+focused on improving the efficiency of the EODC enrichment pipeline, which had previously experienced long runtimes similar to the FCS process. Given that SOPHIS_NA accounts for approximately 99% of all feed data, conducted detailed performance profiling and optimized the Spark job logic by fine-tuning function usage — for example, applying persist() and cache() strategically to cut lineage and avoid redundant computations/shuffle.
+As a result, the processing time for the SOPHIS_NA DRC workflow was reduced from 3–4 hours to approximately 1.5–2 hours — a 50% improvement in performance, significantly lowering both computation time and resource utilization. In addition, redesigned the execution architecture by separating the SOPHIS_NA DRC, SBA, and RRAO processing tasks across multiple servers, enabling true parallel execution and shortening the overall EODC runtime.
+These improvements not only enhanced system performance but also increased the reliability and stability of daily SLA delivery. Future work will focus on further parameter tuning, dynamic resource allocation, and code modularization to maintain scalability as data volume continues to grow.
+
+Goal:
+Upgrade the Tomcat, Spring, Spark, and related frameworks used by the R0C0 systems — including RDL, EGL, ReportingService, ReportingRest, and S3 archival — to address vulnerabilities caused by outdated components. Modify the systems and fix compatibility bugs introduced by the upgrades.
+
+Description：
+successfully upgraded the core frameworks (Tomcat, Spring, Spark) and dependent modules across RDL, EGL, ReportingService, ReportingRest, and S3 archival systems. The upgrades eliminated multiple security vulnerabilities identified in the previous scans, ensuring compliance with the latest security standards.
+To maintain system stability, conducted comprehensive regression and integration testing, identifying and resolving several compatibility issues resulting from framework version gaps,the overall rollout was smooth, and system availability was not impacted.
+The project was completed within the planned timeline, the outcome significantly improved the system’s security posture and maintainability.
+
+Goal:
+Responsible for the codebase management of RDL and EGL, including planned branch management and supporting production environment version upgrades and iterations.
+
+Description：
+effectively managed the RDL and EGL code repositories, ensuring clear branch strategies aligned with project milestones and release schedules. coordinated version control across development, testing, and production environments, minimizing merge conflicts and ensuring smooth delivery of upgrades and hotfixes.
+maintained close collaboration with the QA and RTB teams to ensure version consistency and traceability from development through to production. Several version upgrades were completed on schedule with zero deployment rollbacks, demonstrating high reliability in the release process.
+
+Goal：
+Provide guidance to new team members to help them understand and master the RDL and EGL codebases, ensuring a smooth transition for taking on new feature development in these systems.
+
+Description：
+actively mentored new team members to help them quickly become familiar with the RDL and EGL code structures, development workflows, and system dependencies. organized structured walkthrough sessions to explain key modules, common design patterns, and best practices for debugging and deployment.
+Through pair programming, code reviews, and ongoing Q&A support, helped new developers build confidence in maintaining and extending the RDL and EGL systems. As a result, they were able to independently deliver new features within a short onboarding period, improving overall team productivity and reducing knowledge silos.
+
+
