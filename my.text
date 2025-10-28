@@ -1,11 +1,44 @@
-Drive to impact:
-Delivered impactful outcomes by leading the refactoring of FCS and EODC Spark workflows, achieving over 50% runtime reduction and ensuring SLA compliance—demonstrating focus on what matters most and clear execution through complexity.
+Leadership Model Behaviours
+Drive to Impact
 
-Adapt quickly, always learn:
-Applied strong adaptability and continuous learning by mastering Spark performance tuning techniques (e.g., caching, lineage cutting, partition optimization) and implementing them effectively in large-scale production workflows.
+Articulate a clear path through uncertainty
+• When modernizing the FCS and EODC workflows, evaluated multiple Spark optimization strategies—partitioning, caching, and resource parallelization—and established a clear, data-driven execution roadmap that minimized risk while ensuring SLA compliance.
 
-Unlock the potential of our people:
-Mentored new team members to help them quickly understand RDL and EGL codebases, enabling them to independently deliver new features enhancements within a short onboarding period.
+Act with speed and simplicity
+• Rapidly refactored FCS enrichment logic to remove redundant computation and streamline job dependencies, cutting runtime from 7 hours to 2.5 hours while simplifying pipeline maintenance and accelerating troubleshooting cycles.
 
-Speak up for the good of RBC:
-Consistently challenged existing practices with a solutions-oriented mindset, leading cross-team discussions to drive architectural improvements—such as Spark job restructuring and framework modernization—that set new standards for performance and resilience across systems.
+Focus resources on what matters most
+• Concentrated efforts on optimizing the most resource-intensive datasets (FCS and SOPHIS_NA) that accounted for the majority of system workload, delivering over 60% runtime reduction and saving approximately CAD 90K in annual compute costs.
+
+Adapt Quickly, Always Learn
+
+Innovate with curiosity and purpose
+• Explored and applied advanced Spark techniques—such as targeted persistence, cache management, and lineage breaking—to reduce redundant computation and improve EODC data enrichment efficiency by more than 50%.
+
+Experiment with a passion for learning
+• Performed in-depth Spark performance profiling and shared insights on data lineage optimization and distributed execution tuning, enabling the team to adopt a more analytical and performance-aware development mindset.
+
+Demonstrate flexibility
+• Adapted quickly to complex challenges during cross-system framework upgrades (Tomcat, Spring, Spark), resolving compatibility issues and ensuring uninterrupted production performance across multiple regional environments.
+
+Unlock the Potential of Our People
+
+Inspire with humility, empathy, and inclusivity
+• Created an open, collaborative environment that encouraged new developers to seek guidance and share ideas, fostering confidence and accelerating their integration into the RDL and EGL teams.
+
+Empower and coach to help others be their best
+• Mentored new hires through structured code walkthroughs, design reviews, and pair programming, enabling them to independently deliver EGL feature enhancements on time, while strengthening overall team capability.
+
+Hold ourselves and others accountable
+• Maintained strong ownership and delivery discipline, ensuring all upgrade, optimization, and production rollout tasks were completed ahead of schedule and with exceptional quality.
+
+Speak Up for the Good of Company
+
+Debate with passion and act as one team
+• Proactively contributed to design and architectural discussions on Spark pipeline restructuring, ensuring performance decisions aligned with business goals and operational priorities.
+
+Seek and include diverse perspectives
+• Partnered with QA, RTB, and infrastructure teams to validate proposed optimizations and release procedures, promoting knowledge sharing and ensuring consistent delivery quality across the organization.
+
+Have the courage to challenge the status quo
+• Challenged the existing data model by flattening hierarchical tree structures into tabular form, resolving severe data skew issues, and introducing a hybrid loop-and-join Spark solution to replace inefficient single-record tree traversal—greatly enhancing processing performance and scalability.
