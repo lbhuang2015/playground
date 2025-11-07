@@ -1,4 +1,31 @@
-Over the review period, I demonstrated strong technical execution and collaboration by contributing to multiple critical system initiatives and delivering measurable improvements.
-Through deep analysis and effective implementation, I enhanced overall platform stability, maintainability, and operational efficiency.
-I also actively learned, shared insights, and drove continuous improvement from a contributor’s perspective, creating sustained value for both the team and the business.
-Looking ahead, I aim to further strengthen my impact by deepening expertise in large-scale data optimization and contributing to more cross-functional innovation initiatives.
+1. FCS Optimization
+
+Work has been completed; documentation details are pending refinement.
+
+2. EDOC Flow Optimization
+
+The main focus is on optimizing SOPHIS_NA, as its feed accounts for over 95% of the total data volume across all feeds.
+
+DRC
+
+Current progress:
+Technical optimization has been completed with no impact on output results. In the dev environment, the DRC loading time for SOPHIS_NA has been reduced from 2.5–3 hours to 1.5–2 hours. Considering that the prod environment has 80 executors (each with 64 GB memory, compared to 65 executors × 48 GB in dev), we expect even shorter loading times in production.
+
+Current issue:
+The position data for SOPHIS_NA increases by about 5% every two months. Most of the newly added records have a positionquantity value of 0, yet these records still go through the entire DRC enrichment process and are written into the output table.
+If we filter out records where positionquantity = 0 when loading position data from the MH90 table, the DRC loading time could be further reduced from 1.5–2 hours to around 1 hour.
+To maintain flexibility, users will be allowed to decide whether to enable this filter. A new field, SOPHIS_NA_POSITIONQUANTITY_ZERO_FILTER, will be added to the config table DRC_USER_PREFERED_DATA.
+
+Setting the field value to "Y" enables the filter.
+
+Setting it to "N" disables it.
+
+This approach requires discussion and confirmation with end users.
+
+SBA
+
+The current SBA loading time is 3.5–5 hours, and optimization is feasible. Preliminary analysis suggests it can likely be reduced to under 2 hours.
+
+RRAO
+
+The RRAO loading time is typically around 1 hour, but may reach 2 hours during periods of high cluster resource usage. Optimization is not currently planned for this component.
