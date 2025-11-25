@@ -1,1 +1,269 @@
+Spark 2.4.5 → Spark 3.x upgrade (Java 1.8 + Scala 2.11 → Scala 2.12/2.13) involves a very large number of changes.
 
+## CheckList
+
+# **I. Most critical compatibility breakpoints (must verify)**
+
+## 1. Scala 2.11 **is no longer supported**
+
+Spark 3.x **requires Scala 2.12 or 2.13**.
+
+This means *all* dependencies must switch to:
+
+```
+spark-core_2.12
+spark-sql_2.12
+spark-hive_2.12
+spark-catalyst_2.12
+```
+
+If **any** dependency remains `_2.11`, the application will fail to run.
+
+------
+
+# **II. Important breaking changes in the Java API layer**
+
+## 2. Dataset Encoders changes
+
+Our application heavily uses:
+
+```
+Encoders.bean(MyBean.class)
+```
+
+Spark 3.x keeps this API, but:
+
+### Reflective Bean Encoder is much stricter in Spark 3.x
+
+- Must be a **standard JavaBean** (complete getter/setter)
+- No inner classes, anonymous classes, or unresolved generics
+- Field types must be fully compatible
+   (Java 8 Date/Time types are not supported → must convert to timestamp/string)
+- Nested Bean fields inside Map/List may fail entirely
+
+Given RDL code has many Bean fields and complex types, Spark 3.x may throw:
+
+```
+Unable to infer encoder for type <...>
+```
+
+------
+
+# **III. UDF/UDAF changes**
+
+If Java UDFs are used:
+
+### Spark 3.x enforces stricter registration rules
+
+Spark 2.4:
+
+```
+sparkSession.udf().register("myUdf", new MyUdf(), DataTypes.StringType);
+```
+
+Spark 3.x requires:
+
+- Return type must match exactly
+- UDF argument types must match strictly
+- Catalyst type checking in 3.x is much stricter; mismatches cause AnalysisException
+
+Also:
+
+### HiveUDF/HiveUDAF behavior changed
+
+Spark 3.x rewrote the Hive compatibility layer; return type inference is stricter.
+
+If Hive UDFs are used → may need rewriting.
+
+------
+
+# **IV. Catalyst & Analyzer behavior changes (many SQLs will break)**
+
+Spark 3.x enforces stricter rules:
+
+### 1. ORDER BY / GROUP BY cannot reference columns not in SELECT list
+
+Allowed in 2.4, Spark 3.x throws errors.
+
+### 2. Ambiguous column resolution becomes strict
+
+Example:
+
+```
+col("id")
+```
+
+If two joined tables both have id, Spark 3.x throws:
+
+```
+Reference 'id' is ambiguous
+```
+
+Must explicitly write:
+
+```
+left.col("id")
+```
+
+### 3. Fewer implicit casts
+
+Spark 2.x auto-casts int → long, string → timestamp
+ Spark 3.x removes many of these.
+
+Example:
+
+```
+col("strDate") >= lit("2020-01-01")
+```
+
+Spark 2.x OK
+ Spark 3.x → AnalysisException.
+
+------
+
+# **V. Shuffle behavior changes (affects union / sort heavily)**
+
+Spark 3.x enables AQE (Adaptive Query Execution) by default.
+
+### With AQE enabled, behavior changes:
+
+- Dynamically merges shuffle partitions
+- Dynamic broadcast join
+- Dynamic coalesce
+- Dynamic join strategy changes
+
+For RDL code that relies heavily on **custom partition counts** and many mapPartitions:
+
+### AQE default behavior may cause inconsistent results or regressions
+
+Must review:
+
+```
+spark.sql.adaptive.enabled
+spark.sql.adaptive.coalescePartitions.enabled
+spark.sql.shuffle.partitions
+```
+
+If code relies on hardcoded partition counts, upgrading will change behavior significantly.
+
+------
+
+# **VI. Configuration changes**
+
+Many SparkConf keys are renamed or removed.
+
+Examples:
+
+| Spark 2.x                              | Spark 3.x                  |
+| -------------------------------------- | -------------------------- |
+| spark.sql.cbo.enabled                  | deprecated/replaced        |
+| spark.sql.hive.convertMetastoreParquet | default value changed      |
+| spark.serializer                       | Kryo default class changed |
+
+If special configs are used, must check official migration guide.
+
+------
+
+# **VII. RDD API changes (mapPartitions / map)**
+
+Your current code heavily uses:
+
+```
+.mapPartitions(iter -> { ... })
+```
+
+In Spark 3.x:
+
+### ☑ mapPartitions is still supported
+
+### But closure serialization rules are stricter
+
+For example:
+
+- Cannot capture “this”
+- Cannot reference non-serializable objects
+- Cannot implicitly capture outer-class fields
+- Should use static methods or final local variables
+
+------
+
+# **VIII. Java Serialization vs Kryo defaults have changed**
+
+Spark 3.x strongly encourages – and sometimes auto-enables – Kryo Serializer.
+
+Given our Beans are large and deeply nested:
+
+- Must register all classes
+- Nested Beans inside Map/List must also be registered
+
+Otherwise:
+
+```
+Kryo serialization failed
+```
+
+------
+
+# **IX. Spark 3.x removes some implicit DataFrame = Row conversions**
+
+Some StructType behaviors have changed.
+
+For example:
+
+```
+dataset.schema().apply("colName")
+```
+
+In some cases, Spark 3.x throws errors or returns different results.
+
+------
+
+# **X. SQL date/time parsing changes break many jobs**
+
+Spark 3.x adopts ANSI SQL date/timestamp parsing.
+
+Spark 2.4:
+
+```
+to_timestamp("2020-02-30") = null
+```
+
+Spark 3.x:
+
+```
+to_timestamp("2020-02-30") → throws exception
+```
+
+If the code parses dates heavily, this must be reviewed.
+
+------
+
+# **Final Checklist**
+
+### 1) Dependency upgrade
+
+- Scala 2.12/2.13
+- All spark-core/sql/hive modules switched to correct version
+- Remove all `_2.11` dependencies
+
+### 2) Dataset Bean encoder review
+
+- All beans must have complete getter/setter
+- Field type compatibility check (Java 8 LocalDate/LocalDateTime unsupported)
+- Map<String, Object> requires caution
+
+### 3) Rewrite all mapPartitions to avoid closure capture issues
+
+### 4) Review or disable AQE
+
+It can affect union + persist behavior.
+
+### 5) Fix SQL errors (ambiguous columns, cast issues, group-by changes)
+
+### 6) Fix UDF registration rules
+
+Especially Java UDFs.
+
+### 7) Serialization strategy review (default switches to Kryo)
+
+RDL Beans are large—must review carefully.
