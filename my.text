@@ -267,3 +267,91 @@ Especially Java UDFs.
 ### 7) Serialization strategy review (default switches to Kryo)
 
 RDL Beans are large—must review carefully.
+
+
+
+import org.apache.spark.api.java.function.MapPartitionsFunction;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.Encoders;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.NoSuchElementException;
+
+// 假设您已经定义了所有闭包变量并标记为 final
+final Map<String, ?> shocksMap = loadShocksMap(); 
+final Map<String, ?> holidaysMap = loadHolidaysMap();
+// ... 您的其他闭包变量 ...
+
+Dataset<Row> nonDeltaCurvatureRecords = ...; 
+
+// 定义 mapPartitions 的函数体，使用匿名内部类实现流式迭代器
+MapPartitionsFunction<Row, FrtbEODcSASBASensitivityDataRow> mapper = 
+    (Iterator<Row> originalIterator) -> {
+        
+        // 1. 闭包变量的初始化（或直接引用 final 外部变量）
+        // 这里的 Converter 内部类是可选的，但可以帮助封装逻辑。
+        class PartitionConverter {
+            // 这个内部类实例只会在每个 Task 中创建一次
+            // 引用外部 final 变量，实现闭包优化
+            public FrtbEODcSASBASensitivityDataRow processRow(Row r) {
+                // 假设 NonDeltaCurvatureMapFuntion2 是您的外部工具类
+                // 直接使用外部 final 变量 shocksMap, holidaysMap...
+                return NonDeltaCurvatureMapFuntion2.processRow(r, shocksMap, holidaysMap /* ... */);
+            }
+        }
+        final PartitionConverter converter = new PartitionConverter();
+
+        // 2. 返回匿名内部类实现的流式迭代器
+        return new Iterator<FrtbEODcSASBASensitivityDataRow>() {
+            
+            // 预取槽位
+            private FrtbEODcSASBASensitivityDataRow nextRow = findNext(); 
+
+            // 核心方法：查找下一条有效的记录 (内联逻辑)
+            private FrtbEODcSASBASensitivityDataRow findNext() {
+                while (originalIterator.hasNext()) {
+                    Row r = originalIterator.next();
+                    if (r != null) {
+                        try {
+                            // 调用转换逻辑
+                            FrtbEODcSASBASensitivityDataRow row = converter.processRow(r);
+                            if (row != null) {
+                                return row; // 找到下一个有效记录
+                            }
+                        } catch (Exception e) {
+                            // 记录错误并跳过这条记录
+                            System.err.println("Error processing row: " + e.getMessage());
+                        }
+                    }
+                }
+                return null; // 迭代器结束
+            }
+
+            @Override
+            public boolean hasNext() {
+                if (nextRow == null) {
+                    nextRow = findNext(); 
+                }
+                return nextRow != null;
+            }
+
+            @Override
+            public FrtbEODcSASBASensitivityDataRow next() {
+                if (!hasNext()) { 
+                    throw new NoSuchElementException();
+                }
+                
+                FrtbEODcSASBASensitivityDataRow result = nextRow;
+                nextRow = null; // 消费掉当前记录，置空以便下次预取
+                return result;
+            }
+        };
+    };
+
+// 调用 mapPartitions，并使用 Encoders.bean() 确保类型安全
+Dataset<FrtbEODcSASBASensitivityDataRow> resultDataset = 
+    nonDeltaCurvatureRecords.mapPartitions(
+        mapper, 
+        Encoders.bean(FrtbEODcSASBASensitivityDataRow.class) 
+    );
