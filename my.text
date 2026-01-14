@@ -1,7 +1,7 @@
 //@version=6
-strategy("SPY RTH - Final Master Pro", overlay=true, initial_capital=10000, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
+strategy("SPY RTH - Final Master Pro v2", overlay=true, initial_capital=10000, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
 
-// --- 1. 核心参数设置 ---
+// --- 1. 参数设置 ---
 lookback_mins   = input.int(15, "开盘否定窗口 (min)")
 rejection_ratio = input.float(0.5, "否定深度阈值")
 vol_mult        = input.float(1.2, "成交量放大倍数")
@@ -9,19 +9,23 @@ sw_len          = input.int(10, "二波止损参考K线数")
 max_daily_loss  = input.float(1.5, "日内最大回撤保护 (%)")
 max_trades_day  = input.int(2, "日内最大交易次数")
 
-// --- 2. 分批平仓与追踪止盈 ---
-tp1_target_pct  = input.float(0.3, "第一止盈目标 (%)", tooltip="价格移动此比例平仓一半")
+// --- 2. 分批平仓与利润保护 ---
+tp1_target_pct  = input.float(0.3, "第一止盈目标 (%)")
 scaling_qty_pct = input.int(50, "分批平仓比例 (%)")
 callback_pct    = input.float(0.12, "利润回撤平仓比例 (%)")
+exit_ema_len    = input.int(9, "实体止盈均线 (EMA9)")
 
-// --- 3. 全局系列函数计算 (确保计算一致性) ---
+// --- 3. 全局系列函数计算 ---
 vwap_val      = ta.vwap(close)
-ema_exit_val  = ta.ema(close, 5)
+exit_ema      = ta.ema(close, exit_ema_len)
 vol_ma        = ta.sma(volume, 20)
+
 is_crossover_vwap  = ta.crossover(close, vwap_val)
 is_crossunder_vwap = ta.crossunder(close, vwap_val)
-is_exit_cross_call = ta.crossunder(close, ema_exit_val)
-is_exit_cross_put  = ta.crossover(close, ema_exit_val)
+
+// 实体止盈判定：Open与Close均在均线另一侧
+body_exit_call = open < exit_ema and close < exit_ema
+body_exit_put  = open > exit_ema and close > exit_ema
 
 is_rth = time(timeframe.period, "0930-1600:23456", "America/New_York") != 0
 rth_start_bar = is_rth and not is_rth[1]
@@ -31,19 +35,17 @@ bars_since_open = ta.barssince(rth_start_bar)
 var int trades_count = 0
 if ta.change(time("D", "America/New_York")) != 0
     trades_count := 0
-
 if strategy.position_size[1] == 0 and strategy.position_size != 0
     trades_count := trades_count + 1
 
-// --- 5. 日内风控保护 ---
+// --- 5. 日内风控 ---
 var float day_start_equity = na
 if ta.change(time("D", "America/New_York")) != 0
     day_start_equity := strategy.equity
-
 current_day_pnl_pct = (strategy.equity - day_start_equity) / day_start_equity * 100
 can_trade = current_day_pnl_pct > -max_daily_loss and trades_count < max_trades_day
 
-// --- 6. 盘前状态与当日 Bias 判定 ---
+// --- 6. 状态记录与方向判定 ---
 var float prev_c = na
 var float eth_h  = na
 var float eth_l  = na
@@ -56,7 +58,7 @@ if ta.change(time("D", "America/New_York")) != 0
 else if not is_rth
     eth_h := math.max(eth_h, high), eth_l := math.min(eth_l, low)
 
-// --- 7. 信号判定逻辑 ---
+// --- 7. 信号判定 ---
 in_window = is_rth and bars_since_open <= (lookback_mins / timeframe.multiplier)
 time_filter = hour < 14 or (hour == 14 and minute < 30)
 
@@ -68,18 +70,16 @@ if long_1st
 if short_1st
     bias_s := true
 
-// 第二波：价格突破 VWAP 确认
 long_2nd  = bias_l and strategy.position_size == 0 and is_crossover_vwap and is_rth and not in_window and time_filter
 short_2nd = bias_s and strategy.position_size == 0 and is_crossunder_vwap and is_rth and not in_window and time_filter
 
-// --- 8. 入场执行与动态止损 ---
+// --- 8. 入场执行 ---
 swing_l = ta.lowest(low, sw_len)
 swing_h = ta.highest(high, sw_len)
 var float active_sl = na
 var float hi_seen = na
 var float lo_seen = na
 
-// 修复 Entry 语法错误：使用明确的分支判断
 if can_trade and strategy.position_size == 0
     if (long_1st or long_2nd)
         strategy.entry("Long", strategy.long, comment=(long_1st ? "W1" : "W2") + "_Buy")
@@ -90,7 +90,7 @@ if can_trade and strategy.position_size == 0
         active_sl := short_1st ? high : math.max(swing_h, vwap_val + 0.5)
         tp1_hit := false
 
-// --- 9. 追踪止盈与分批平仓逻辑 ---
+// --- 9. 持仓追踪与分批平仓 ---
 if strategy.position_size > 0
     hi_seen := na(hi_seen) ? high : math.max(hi_seen, high)
     if not tp1_hit and hi_seen >= strategy.position_avg_price * (1 + tp1_target_pct/100)
@@ -111,16 +111,17 @@ if tp1_hit and strategy.position_size != 0
     else if strategy.position_size < 0 and close > lo_seen * (1 + callback_pct / 100)
         trailing_exit := true
 
-// --- 10. 退出执行 ---
+// --- 10. 离场执行 ---
 if strategy.position_size != 0
     if (strategy.position_size > 0 and close < active_sl) or (strategy.position_size < 0 and close > active_sl)
-        strategy.close_all(comment="Stop_Loss")
-    else if (strategy.position_size > 0 and is_exit_cross_call) or (strategy.position_size < 0 and is_exit_cross_put) or trailing_exit
-        strategy.close_all(comment=trailing_exit ? "Trailing" : "EMA5_Exit")
+        strategy.close_all(comment="Hard_SL")
+    else if (strategy.position_size > 0 and body_exit_call) or (strategy.position_size < 0 and body_exit_put) or trailing_exit
+        strategy.close_all(comment=trailing_exit ? "Trail" : "Body_Exit")
 
 if (ta.crossunder(time, timestamp("America/New_York", year, month, dayofmonth, 15, 50)))
     strategy.close_all(comment="EOD_Force")
 
-// --- 11. 绘图 (修复颜色语法) ---
+// --- 11. 绘图 ---
 plot(vwap_val, "VWAP", color=color.new(color.orange, 50), linewidth=2)
+plot(exit_ema, "EMA9_Exit", color=color.new(color.blue, 60))
 plot(active_sl, "SL_Line", color=color.new(color.red, 40), style=plot.style_linebr)
