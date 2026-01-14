@@ -1,5 +1,5 @@
 //@version=6
-strategy("SPY RTH - Final Master Pro v2", overlay=true, initial_capital=10000, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
+strategy("SPY RTH - Final Master Pro v2 BE", overlay=true, initial_capital=10000, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
 
 // --- 1. 参数设置 ---
 lookback_mins   = input.int(15, "开盘否定窗口 (min)")
@@ -10,8 +10,9 @@ max_daily_loss  = input.float(1.5, "日内最大回撤保护 (%)")
 max_trades_day  = input.int(2, "日内最大交易次数")
 
 // --- 2. 分批平仓与利润保护 ---
-tp1_target_pct  = input.float(0.3, "第一止盈目标 (%)")
+tp1_target_pct  = input.float(0.3, "第一止盈目标 (%)", tooltip="价格移动此比例平仓一半")
 scaling_qty_pct = input.int(50, "分批平仓比例 (%)")
+be_activation   = input.float(0.2, "保本触发阈值 (%)", tooltip="价格上涨此比例后，止损移至成本价，保护余仓")
 callback_pct    = input.float(0.12, "利润回撤平仓比例 (%)")
 exit_ema_len    = input.int(9, "实体止盈均线 (EMA9)")
 
@@ -90,20 +91,32 @@ if can_trade and strategy.position_size == 0
         active_sl := short_1st ? high : math.max(swing_h, vwap_val + 0.5)
         tp1_hit := false
 
-// --- 9. 持仓追踪与分批平仓 ---
+// --- 9. 持仓追踪、分批平仓与保本触发 ---
 if strategy.position_size > 0
     hi_seen := na(hi_seen) ? high : math.max(hi_seen, high)
+    
+    // 分批平仓逻辑
     if not tp1_hit and hi_seen >= strategy.position_avg_price * (1 + tp1_target_pct/100)
         tp1_hit := true
         strategy.close("Long", qty_percent=scaling_qty_pct, comment="TP1_Half")
+    
+    // 保本触发逻辑：上涨超过阈值，将止损移至成本价
+    if hi_seen >= strategy.position_avg_price * (1 + be_activation/100)
+        active_sl := math.max(active_sl, strategy.position_avg_price + syminfo.mintick * 10)
+
 else if strategy.position_size < 0
     lo_seen := na(lo_seen) ? low : math.min(lo_seen, low)
+    
     if not tp1_hit and lo_seen <= strategy.position_avg_price * (1 - tp1_target_pct/100)
         tp1_hit := true
         strategy.close("Short", qty_percent=scaling_qty_pct, comment="TP1_Half")
+        
+    if lo_seen <= strategy.position_avg_price * (1 - be_activation/100)
+        active_sl := math.min(active_sl, strategy.position_avg_price - syminfo.mintick * 10)
 else
     hi_seen := na, lo_seen := na
 
+// 追踪止盈判定
 trailing_exit = false
 if tp1_hit and strategy.position_size != 0
     if strategy.position_size > 0 and close < hi_seen * (1 - callback_pct / 100)
@@ -113,8 +126,10 @@ if tp1_hit and strategy.position_size != 0
 
 // --- 10. 离场执行 ---
 if strategy.position_size != 0
+    // 触发止损或保本
     if (strategy.position_size > 0 and close < active_sl) or (strategy.position_size < 0 and close > active_sl)
-        strategy.close_all(comment="Hard_SL")
+        strategy.close_all(comment="SL/BE")
+    // 触发均线实体止盈或追踪止盈
     else if (strategy.position_size > 0 and body_exit_call) or (strategy.position_size < 0 and body_exit_put) or trailing_exit
         strategy.close_all(comment=trailing_exit ? "Trail" : "Body_Exit")
 
@@ -124,4 +139,4 @@ if (ta.crossunder(time, timestamp("America/New_York", year, month, dayofmonth, 1
 // --- 11. 绘图 ---
 plot(vwap_val, "VWAP", color=color.new(color.orange, 50), linewidth=2)
 plot(exit_ema, "EMA9_Exit", color=color.new(color.blue, 60))
-plot(active_sl, "SL_Line", color=color.new(color.red, 40), style=plot.style_linebr)
+plot(active_sl, "SL_BE_Line", color=color.new(color.red, 40), style=plot.style_linebr)
