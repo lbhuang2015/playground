@@ -1,49 +1,57 @@
 //@version=6
-strategy("SPY RTH - VWAP Second Wave Pro", overlay=true, initial_capital=10000, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
+strategy("SPY RTH - Final Pro Master", overlay=true, initial_capital=10000, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
 
-// --- 1. 参数设置 ---
+// --- 1. 核心参数 ---
 lookback_mins   = input.int(15, "开盘否定窗口 (min)")
 rejection_ratio = input.float(0.5, "否定深度阈值")
 vol_mult        = input.float(1.2, "成交量放大倍数")
 sw_len          = input.int(10, "二波止损参考K线数")
+max_daily_loss  = input.float(1.5, "日内最大回撤保护 (%)")
 
-// --- 2. 利润保护参数 ---
-exit_ema_len   = input.int(5, "动态退出均线 (EMA5)")
-activation_pct = input.float(0.3, "开启利润保护门槛 (%)")
-callback_pct   = input.float(0.15, "利润回撤平仓比例 (%)")
+// --- 2. 分批平仓与利润保护 ---
+tp1_target_pct  = input.float(0.3, "第一止盈目标 (%)", tooltip="价格移动此比例平仓一半，锁定0DTE利润")
+scaling_qty_pct = input.int(50, "分批平仓比例 (%)")
+callback_pct    = input.float(0.12, "利润回撤平仓比例 (%)", tooltip="开启TP1后，从高点回落此比例平余仓")
 
-// --- 3. 全局系列函数计算 ---
+// --- 3. 全局系列函数计算 (解决警告) ---
 vwap_val      = ta.vwap(close)
-ema_exit_val  = ta.ema(close, exit_ema_len)
+ema_exit_val  = ta.ema(close, 5)
 vol_ma        = ta.sma(volume, 20)
 
-// 提取核心交叉逻辑：第二波定义为价格站上 VWAP
 is_crossover_vwap  = ta.crossover(close, vwap_val)
 is_crossunder_vwap = ta.crossunder(close, vwap_val)
 is_exit_cross_call = ta.crossunder(close, ema_exit_val)
 is_exit_cross_put  = ta.crossover(close, ema_exit_val)
 
-// 时间与K线统计
 is_rth = time(timeframe.period, "0930-1600:23456", "America/New_York") != 0
 rth_start_bar = is_rth and not is_rth[1]
 bars_since_open = ta.barssince(rth_start_bar)
 
-// --- 4. 盘前状态与当日方向判定 (Bias) ---
+// --- 4. 账户级别日内风控 ---
+var float day_start_equity = na
+if ta.change(time("D", "America/New_York")) != 0
+    day_start_equity := strategy.equity
+
+current_day_loss = (strategy.equity - day_start_equity) / day_start_equity * 100
+can_trade = current_day_loss > -max_daily_loss
+
+// --- 5. 状态记录与方向判定 ---
 var float prev_c = na
 var float eth_h  = na
 var float eth_l  = na
 var bool  bias_l = false
 var bool  bias_s = false
+var bool  tp1_hit = false 
 
 if ta.change(time("D", "America/New_York")) != 0
-    prev_c := close[1], eth_h := high, eth_l := low, bias_l := false, bias_s := false
+    prev_c := close[1], eth_h := high, eth_l := low, bias_l := false, bias_s := false, tp1_hit := false
 else if not is_rth
     eth_h := math.max(eth_h, high), eth_l := math.min(eth_l, low)
 
-// --- 5. 信号判定 ---
+// --- 6. 信号判定 ---
 in_window = is_rth and bars_since_open <= (lookback_mins / timeframe.multiplier)
+time_filter = hour < 14 or (hour == 14 and minute < 30)
 
-// 第一波信号 (基于 ETH 否定)
 long_1st  = in_window and (prev_c - eth_l) > 0 and close > (eth_l + (prev_c - eth_l) * rejection_ratio) and volume > vol_ma * vol_mult
 short_1st = in_window and (eth_h - prev_c) > 0 and close < (eth_h - (eth_h - prev_c) * rejection_ratio) and volume > vol_ma * vol_mult
 
@@ -52,58 +60,63 @@ if long_1st
 if short_1st
     bias_s := true
 
-// 第二波信号：当日方向确认后，第一根 K 线站上 VWAP (解决连开三仓问题)
-long_2nd  = bias_l and strategy.position_size == 0 and is_crossover_vwap and is_rth and not in_window
-short_2nd = bias_s and strategy.position_size == 0 and is_crossunder_vwap and is_rth and not in_window
+// 第二波确认：价格站上 VWAP 入场
+long_2nd  = bias_l and strategy.position_size == 0 and is_crossover_vwap and is_rth and not in_window and time_filter
+short_2nd = bias_s and strategy.position_size == 0 and is_crossunder_vwap and is_rth and not in_window and time_filter
 
-// --- 6. 动态止损点位 ---
+// --- 7. 入场执行与止损点位 ---
 swing_l = ta.lowest(low, sw_len)
 swing_h = ta.highest(high, sw_len)
 var float active_sl = na
 var float hi_seen = na
 var float lo_seen = na
 
-if (long_1st or long_2nd) and strategy.position_size == 0
-    strategy.entry("Call", strategy.long, comment=long_1st ? "1st Wave" : "2nd Wave")
-    // 二波止损：取 Swing Low 与 VWAP 的最小值，增加容错空间
-    active_sl := long_1st ? low : math.min(swing_l, vwap_val - syminfo.mintick * 10)
+// 修复 Entry 逻辑错误
+if can_trade and strategy.position_size == 0
+    if (long_1st or long_2nd)
+        strategy.entry("Long", strategy.long, comment=long_1st ? "W1_Entry" : "W2_VWAP")
+        active_sl := long_1st ? low : math.min(swing_l, vwap_val - 0.5)
+        tp1_hit := false
+    else if (short_1st or short_2nd)
+        strategy.entry("Short", strategy.short, comment=short_1st ? "W1_Entry" : "W2_VWAP")
+        active_sl := short_1st ? high : math.max(swing_h, vwap_val + 0.5)
+        tp1_hit := false
 
-if (short_1st or short_2nd) and strategy.position_size == 0
-    strategy.entry("Put", strategy.short, comment=short_1st ? "1st Wave" : "2nd Wave")
-    active_sl := short_1st ? high : math.max(swing_h, vwap_val + syminfo.mintick * 10)
-
-// --- 7. 利润追踪逻辑 ---
+// --- 8. 追踪与分批平仓逻辑 ---
 if strategy.position_size > 0
     hi_seen := na(hi_seen) ? high : math.max(hi_seen, high)
+    if not tp1_hit and hi_seen >= strategy.position_avg_price * (1 + tp1_target_pct/100)
+        tp1_hit := true
+        strategy.close("Long", qty_percent=scaling_qty_pct, comment="TP1_Half")
 else if strategy.position_size < 0
     lo_seen := na(lo_seen) ? low : math.min(lo_seen, low)
+    if not tp1_hit and lo_seen <= strategy.position_avg_price * (1 - tp1_target_pct/100)
+        tp1_hit := true
+        strategy.close("Short", qty_percent=scaling_qty_pct, comment="TP1_Half")
 else
     hi_seen := na, lo_seen := na
 
+// 追踪保护判定
 trailing_exit = false
-if strategy.position_size > 0 and not na(hi_seen)
-    float gain = (hi_seen - strategy.position_avg_price) / strategy.position_avg_price
-    if gain > activation_pct / 100 and close < hi_seen * (1 - callback_pct / 100)
+if tp1_hit and strategy.position_size != 0
+    if strategy.position_size > 0 and close < hi_seen * (1 - callback_pct / 100)
         trailing_exit := true
-else if strategy.position_size < 0 and not na(lo_seen)
-    float gain = (strategy.position_avg_price - lo_seen) / strategy.position_avg_price
-    if gain > activation_pct / 100 and close > lo_seen * (1 + callback_pct / 100)
+    else if strategy.position_size < 0 and close > lo_seen * (1 + callback_pct / 100)
         trailing_exit := true
 
-// --- 8. 执行离场 ---
+// --- 9. 最终平仓执行 ---
 if strategy.position_size != 0
-    // 硬止损：价格触碰 active_sl
+    // 硬性止损
     if (strategy.position_size > 0 and close < active_sl) or (strategy.position_size < 0 and close > active_sl)
-        strategy.close_all(comment="SL Hit")
-    // 动态离场：EMA 交叉或追踪止盈
+        strategy.close_all(comment="Hard_SL")
+    // EMA/追踪离场
     else if (strategy.position_size > 0 and is_exit_cross_call) or (strategy.position_size < 0 and is_exit_cross_put) or trailing_exit
-        strategy.close_all(comment=trailing_exit ? "Trailing" : "EMA Exit")
+        strategy.close_all(comment=trailing_exit ? "Trailing" : "EMA_Exit")
 
-// EOD 强制平仓
+// 收盘强制平仓
 if (ta.crossunder(time, timestamp("America/New_York", year, month, dayofmonth, 15, 50)))
     strategy.close_all(comment="EOD")
 
-// --- 9. 绘图与可视化 (修正 transp) ---
+// --- 10. 绘图 (修正 V6 颜色语法) ---
 plot(vwap_val, "VWAP", color=color.new(color.orange, 50), linewidth=2)
-plot(active_sl, "硬止损线", color=color.new(color.red, 30), style=plot.style_linebr)
-plot(strategy.position_size != 0 ? (strategy.position_size > 0 ? strategy.position_avg_price * (1 + activation_pct/100) : strategy.position_avg_price * (1 - activation_pct/100)) : na, "利润保护线", color=color.new(color.green, 50), style=plot.style_linebr)
+plot(active_sl, "SL_Line", color=color.new(color.red, 40), style=plot.style_linebr)
