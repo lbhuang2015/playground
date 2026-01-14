@@ -1,22 +1,24 @@
 //@version=6
-strategy("SPY RTH - Dynamic Bias & Open Filter", overlay=true, initial_capital=10000, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
+strategy("SPY RTH - Dynamic Bias Master v3", overlay=true, initial_capital=10000, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
 
-// --- 1. 参数设置 ---
+// --- 1. 核心参数设置 ---
 lookback_mins   = input.int(15, "开盘否定窗口 (min)")
 rejection_ratio = input.float(0.5, "否定深度阈值")
 vol_mult        = input.float(1.2, "成交量放大倍数")
 sw_len          = input.int(10, "二波止损参考K线数")
 max_daily_loss  = input.float(1.5, "日内最大回撤保护 (%)")
-max_trades_day  = input.int(2, "日内最大交易次数")
 
-// --- 2. 利润保护与止盈 ---
+// --- 2. 新增：日内开仓次数可调参数 ---
+max_trades_day  = input.int(3, "日内最大交易次数", minval=1, maxval=5)
+
+// --- 3. 分批平仓与利润保护 ---
 tp1_target_pct  = input.float(0.3, "第一止盈目标 (%)")
 scaling_qty_pct = input.int(50, "分批平仓比例 (%)")
 be_activation   = input.float(0.2, "保本触发阈值 (%)")
 callback_pct    = input.float(0.12, "利润回撤平仓比例 (%)")
 exit_ema_len    = input.int(9, "实体止盈均线 (EMA9)")
 
-// --- 3. 全局计算 ---
+// --- 4. 全局计算 ---
 vwap_val      = ta.vwap(close)
 exit_ema      = ta.ema(close, exit_ema_len)
 vol_ma        = ta.sma(volume, 20)
@@ -32,18 +34,18 @@ is_rth = time(timeframe.period, "0930-1600:23456", "America/New_York") != 0
 rth_start_bar = is_rth and not is_rth[1]
 bars_since_open = ta.barssince(rth_start_bar)
 
-// --- 4. 动态偏见逻辑与开盘价记录 ---
+// --- 5. 动态偏见逻辑与开盘价记录 ---
 var bool bias_l = false
 var bool bias_s = false
 var float prev_c = na
 var float eth_h = na
 var float eth_l = na
-var float day_open = na // 记录当日开盘价
+var float day_open = na 
 var bool tp1_hit = false
 
 if ta.change(time("D", "America/New_York")) != 0
     prev_c := close[1], eth_h := high, eth_l := low, bias_l := false, bias_s := false, tp1_hit := false
-    day_open := open // 记录 RTH 第一根 K 线开盘价
+    day_open := open 
 else if not is_rth
     eth_h := math.max(eth_h, high), eth_l := math.min(eth_l, low)
 
@@ -56,7 +58,7 @@ if long_1st
 if short_1st
     bias_s := true
 
-// 偏见翻转 (Bias Flip)
+// 偏见翻转 (Bias Flip) - 解决12月31日类似反转行情
 if bias_l and is_crossunder_vwap and not in_window
     bias_l := false
     bias_s := true
@@ -64,7 +66,7 @@ if bias_s and is_crossover_vwap and not in_window
     bias_s := false
     bias_l := true
 
-// --- 5. 交易执行 (包含开盘价过滤) ---
+// --- 6. 交易执行 (应用 max_trades_day 参数) ---
 var int trades_count = 0
 if ta.change(time("D", "America/New_York")) != 0
     trades_count := 0
@@ -73,10 +75,11 @@ if strategy.position_size[1] == 0 and strategy.position_size != 0
 
 time_filter = hour < 14 or (hour == 14 and minute < 30)
 
-// 核心规则：反转入场必须穿过当日开盘价
+// 反转入场增加开盘价过滤
 long_2nd  = bias_l and strategy.position_size == 0 and is_crossover_vwap and close > day_open and is_rth and not in_window and time_filter
 short_2nd = bias_s and strategy.position_size == 0 and is_crossunder_vwap and close < day_open and is_rth and not in_window and time_filter
 
+// 初始化为 na 解决图表缩放问题
 var float active_sl = na
 var float hi_seen = na
 var float lo_seen = na
@@ -91,7 +94,7 @@ if (trades_count < max_trades_day) and strategy.position_size == 0
         active_sl := short_1st ? high : math.max(ta.highest(high, sw_len), vwap_val + 0.5)
         tp1_hit := false
 
-// --- 6. 持仓追踪与离场 (修正图表压缩) ---
+// --- 7. 持仓追踪与离场 ---
 if strategy.position_size != 0
     if strategy.position_size > 0
         hi_seen := na(hi_seen) ? high : math.max(hi_seen, high)
@@ -108,7 +111,7 @@ if strategy.position_size != 0
         if lo_seen <= strategy.position_avg_price * (1 - be_activation/100)
             active_sl := math.min(active_sl, strategy.position_avg_price - syminfo.mintick * 10)
 else
-    active_sl := na, hi_seen := na, lo_seen := na // 无持仓时设为 na，防止压缩图表
+    active_sl := na, hi_seen := na, lo_seen := na // 彻底防止 K 线被挤压
 
 trailing_exit = tp1_hit and (strategy.position_size > 0 ? close < hi_seen * (1 - callback_pct / 100) : close > lo_seen * (1 + callback_pct / 100))
 
@@ -121,8 +124,7 @@ if strategy.position_size != 0
 if (ta.crossunder(time, timestamp("America/New_York", year, month, dayofmonth, 15, 50)))
     strategy.close_all(comment="EOD")
 
-// --- 7. 绘图 ---
+// --- 8. 绘图 ---
 plot(strategy.position_size != 0 ? active_sl : na, "SL/BE_Line", color=color.new(color.red, 40), style=plot.style_linebr, linewidth=2)
 plot(vwap_val, "VWAP", color=color.new(color.orange, 50), linewidth=2)
 plot(exit_ema, "EMA9_Exit", color=color.new(color.blue, 60))
-plot(day_open, "Day Open", color=color.new(color.gray, 70), style=plot.style_circles)
