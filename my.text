@@ -16,7 +16,7 @@ tp1_target_pct  = input.float(0.3, "第一止盈目标 (%)")
 scaling_qty_pct = input.int(50, "分批平仓比例 (%)")
 be_activation   = input.float(0.2, "保本触发阈值 (%)")
 callback_pct    = input.float(0.12, "利润回撤平仓比例 (%)")
-exit_ema_len    = input.int(9, "实体止盈均线 (EMA9)")
+exit_ema_len    = input.int(11, "实体止盈均线 (EMA9)")
 
 // --- 4. 全局计算 ---
 vwap_val      = ta.vwap(close)
