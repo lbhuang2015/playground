@@ -16,7 +16,7 @@ tp1_target_pct  = input.float(0.3, "第一止盈目标 (%)")
 scaling_qty_pct = input.int(50, "分批平仓比例 (%)")
 be_activation   = input.float(0.2, "保本触发阈值 (%)")
 callback_pct    = input.float(0.12, "利润回撤平仓比例 (%)")
-exit_ema_len    = input.int(11, "实体止盈均线 (EMA9)")
+exit_ema_len    = input.int(20, "实体止盈均线 (EMA9)")
 
 // --- 4. 全局计算 ---
 vwap_val      = ta.vwap(close)
@@ -130,4 +130,4 @@ if (ta.crossunder(time, timestamp("America/New_York", year, month, dayofmonth, 1
 // --- 8. 绘图 ---
 plot(strategy.position_size != 0 ? active_sl : na, "SL/BE_Line", color=color.new(color.red, 40), style=plot.style_linebr, linewidth=2)
 plot(vwap_val, "VWAP", color=color.new(color.orange, 50), linewidth=2)
-plot(exit_ema, "EMA9_Exit", color=color.new(color.blue, 60))
+plot(exit_ema, "EMA20_Exit", color=color.new(color.blue, 60))
