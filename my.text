@@ -84,14 +84,17 @@ var float active_sl = na
 var float hi_seen = na
 var float lo_seen = na
 
+lowest_sw = ta.lowest(low, sw_len)
+highest_sw = ta.highest(high, sw_len)
+
 if (trades_count < max_trades_day) and strategy.position_size == 0
     if (long_1st or long_2nd)
         strategy.entry("Long", strategy.long, comment=long_1st ? "W1" : "W2_Flip")
-        active_sl := long_1st ? low : math.min(ta.lowest(low, sw_len), vwap_val - 0.5)
+        active_sl := long_1st ? low : math.min(lowest_sw, vwap_val - 0.5)
         tp1_hit := false
     else if (short_1st or short_2nd)
         strategy.entry("Short", strategy.short, comment=short_1st ? "W1" : "W2_Flip")
-        active_sl := short_1st ? high : math.max(ta.highest(high, sw_len), vwap_val + 0.5)
+        active_sl := short_1st ? high : math.max(highest_sw, vwap_val + 0.5)
         tp1_hit := false
 
 // --- 7. 持仓追踪与离场 ---
