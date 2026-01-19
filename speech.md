@@ -1,133 +1,45 @@
-第一页
+Phase 1: Parallel Feature Development (Isolation)
+Create Feature Branch: Start from the currently deployed release branch (e.g., branch-release/7.5.1).
 
-Hello everyone, I'm X XX from xxx program team, I'm currently working FRTB projet, and I'm excited to take this opportunity to present an overview of our FRTB project to our senior leadership team from Toronto and our colleagues in Halifax Hub, highlighting the key milestones we have reached and the significant achievements of our team.
+git checkout -b feature/A branch-release/7.5.1
 
-As we know, FRTB, its full name is The Fundamental Review of the Trading Book, our FRTB project is a crucial initiative for our bank, as it aligns with global regulatory frameworks to strengthen market risk management. This project is essential due to several key reasons,such as Compliance with Basel III Regulations,Risk Management Enhancement,Improved Capital Efficiency,Enhanced Decision Making, Global Consistency, etc.
+Daily Development: Developers pull their own sub-branches from feature/A. Once development is complete, changes are merged back into feature/A via Pull Request (PR).
 
-As a developer in the FRTB Dev team, I would like to provide you with a comprehensive overview of our project from development perspective. I will walk you through the business flow, introduce the architecture of our application, and show you the technologies we have employed.
+Initial QA Testing: Build the test package (e.g., Build 101) directly from feature/A. QA verifies the logical correctness of the specific feature in isolation.
 
-第二页
+Phase 2: Release Integration (Deterministic Merging)
+When the scope for the next Release (7.5.2) is decided (e.g., including only Feature B):
 
-fisrt of all, let's see the business flow of our FRTB Project. This slide outlines the key processes involved in our workflow.
+Create Release Branch: Use the production environment (7.5.1) as the baseline to pull a brand-new release branch.
 
+git checkout -b branch-release/7.5.2 branch-release/7.5.1
 
-From this diagram, we can see that the FRTB application takes EODC data as input. The EODC data includes trading positions from 55 feeds and multiple market regions, These data encompass all trading products, including equities, futures, options, and bonds. Each day, we process a significant volume of data, reaching up to 100 million records.
+Cherry-pick Features: * Switch to your local branch-release/7.5.2.
 
-Additionally, the FRTB application uses reference data as input. This reference data contains background information for the trading data, such as security data,market data, book data, an example is rating provided by institutions. 
+Cherry-pick the relevant commits from feature/B. (Recommendation: If there are many commits, perform a Squash on the feature/B branch first.)
 
-Our FRTB Application is structured into three main phases:
-data enrichment, SA Calculating and Reporting service
-FRTB application uses ETL and enrichment processes to Extract,Transform and Load these data, combine the position data and corresponding reference data, make them suitable for the next step
-and then we will apply the standardized approaches (SA) for risk assessment and measurement.Standardized approaches come from the Basel III measures. This ensures compliance with regulatory capital requirements.
-The FRTB application also provides a reporting service, for generating specific reports to regulators and internal auditors.
+Conflict Resolution & Synchronization (PR): * Push the merged code to a temporary branch: sync-B-to-7.5.2.
 
-in the last part of the flow, regulators and internal auditor will receive SA Reports, which support multiple frequencies such as daily, weekly, and monthly. By default, the FRTB application generates daily SA Reports. 
-Additionally, for the data processed by the FRTB application, they are stored in the hot storage and cold stroges,and can be accessed and used by other internal data consumers in the company for various purposes.
+Open a PR to merge into branch-release/7.5.2. This step maintains an audit trail and allows colleagues to review that conflicts were resolved correctly.
 
-In summary, our FRTB Project efficiently processes large volumes of trading data, enriches it, applies standardized risk assessment approaches, and generates comprehensive reports for regulators, auditors, and provides the processed risk data for internal data consumers.
+Regression Testing: Generate a build from branch-release/7.5.2 for QA to perform final regression testing before the go-live.
 
-第三页
+Phase 3: Deployment & Solidification (Production Snapshot)
+Execute Deployment: Deploy the code from branch-release/7.5.2 to the production environment.
 
-This slide provides a more detailed breakdown of the FRTB system's architecture and data flow, expanding on what we discussed earlier. Here, you can see how we have structured the FRTB project into three distinct phases, each supported by a dedicated component.
+Confirm Stability: Monitor production performance (e.g., ensure smoke tests pass and there is no risk of rollback within the first 24 hours).
 
-Firstly, we have the **Risk Data Layer**. This component handles the crucial tasks of data extraction, transformation, and enrichment, ensuring that the raw trading data is fully prepared for further analysis.
+Apply Retroactive Tag (Permanent Milestone): Once stability is confirmed, apply a formal tag to the specific commit used for deployment.
 
-Next is the **SA Calculator**. This component is the core of our risk computation, implementing the Standardized Approach (SBA), Default Risk Charge (DRC), and Residual Risk Add-On (RRAO) methods in accordance with Basel III regulations. It calculates the risk capital charge for the trading book, providing precise and compliant risk assessments.
+git checkout branch-release/7.5.2
 
-Lastly, the **Reporting Service** component. This part of the system is responsible for generating the SA Reports. It ensures that we can deliver comprehensive and accurate reports to meet regulatory requirements.
+git tag -a v7.5.2 -m "Production release of 7.5.2 - Feature B included"
 
-Together, these three components empower the FRTB application to process over 100 million trade records and produce detailed risk reports for the trading book. This robust system architecture not only meets regulatory demands but also significantly enhances our internal risk management capabilities.
+git push origin v7.5.2
 
-第四页
+Phase 4: Post-Release Maintenance (Synchronization)
+Rebasing Future Features: If Feature A is postponed to the next version, its "base" must now be updated to 7.5.2.
 
+git checkout feature/A
 
-This diagram showcases the technology stack currently used in our project. The input data for the FRTB project and the enriched data generated by the risk data layer components are primarily stored in a data lake for hot storage. For cold storage, we use Data Glacier solutions like S3, Dell ECS, and IBM COS to store historical data (e.g., data older than two years). Configuration data for FRTB is stored in an SQL server.
-
-In the messaging layer, we primarily use SNS to receive notifications from upstream systems indicating that feed data is ready. When the FRTB processing is complete, we also send SNS notifications to downstream systems.
-
-In the data ETL and computation layer, due to the large volume of data, we primarily use an on-premise Spark cluster for data computation. We submit daily data ETL and SA Capital Charge computation tasks to the cluster using Java and Scala. I know we have plans to migrate our on-premise applications to the public cloud, but I'm not sure about the exact dates. Currently, we are conducting some technical validation work.
-After the computation, we use Dremio to accelerate data query and analysis. Additionally, we use Spring Boot and Swagger to provide interfaces and services to users and data consumers.
-
-Finally, for data analysis and visualization, we use RISK Core, Fabric, and Tableau as the primary tools. 
-
-For DevOps, we mainly use JIRA for project management, GitHub for source code management, Jenkins for build creation, and UCD for application deployment.
-
-that's pretty much the technologies used in our project.
-
-第五页
-
-this slide presents the upcoming work of our project in Fiscal Year 24, we will focus on two main areas: Business Enhancement and Technology Evolution.
-
-for Business Enhancement
-we are aiming to expand our regulatory reporting to include additional authorities. Currently, we are compliant with OSFI in Canada, but moving forward, we will also target compliance with the regulators in the UK and the US. This expansion ensures that we meet the regulatory requirements in key financial markets, strengthening our global compliance framework.
-
-for Technology Evolving
-On the technology front, we have several key initiatives to ensure our systems remain cutting-edge and efficient:
-
-CDP and Spark Upgrade: We plan to upgrade our CDP and Spark platforms alongside an upgrade to our DNA cluster. This will enhance our data processing capabilities and improve overall system performance.
-
-Architectural Restructure and Performance Optimization: In response to changes in the FED methodology, we are restructuring our architecture and optimizing performance. This will ensure our systems are robust and can handle the increased complexity and volume of data processing required.
-
-Microsoft Azure: We are also conducting a Proof of Concept for migrating our on-premise application to Microsoft Azure. This will allow us to explore the benefits of cloud computing, including scalability, flexibility, and cost-efficiency.
-
-
-In summary, our focus for FY24 is on expanding our regulatory compliance footprint,providing continuous production support and evolving our technology to meet future demands. These steps will ensure we are well-prepared for the challenges ahead and can continue to deliver exceptional value to our stakeholders.
-
-第六页
-
-in the last, I would like to share with you some of our team's recent accomplishments, as highlighted in this slide.
-
-FRTB Go-Live
-First, we successfully went live with our FRTB project in October 2023. This marks a significant milestone for our team, as it demonstrates our ability to deliver complex regulatory projects on time and within scope. This achievement not only enhances our risk management capabilities but also ensures compliance with the latest Basel III requirements.
-
-Darwin Change
-In December 2023, we completed the Change for Darwin, which has now gone into production. This upgrade represents a major improvement in our system's performance and functionality, allowing us to process data more efficiently and effectively. The successful deployment of this upgrade underscores our commitment to continuous improvement and innovation.
-
-Ongoing Production Support
-Lastly, our ongoing production support includes addressing tech currency items for vulnerability remediation. We are committed to maintaining the highest standards of security and reliability in our systems. Our team works around the clock to ensure that any vulnerabilities are promptly identified and remediated, ensuring the integrity and security of our data and systems.
-
-These accomplishments reflect the hard work and dedication of our team. Through the FRTB project, we have significantly enhanced our ability to meet regulatory requirements and manage risk more effectively. We are committed to continuing our efforts and making further contributions to the company's compliance and risk management objectives.
-
-
-
-
-### Drive to Impact
-
-1. **Articulate a clear path through uncertainty**:
-   - When the technical stack is undecided, conducting a detailed analysis comparing different technologies and presents a clear decision-making path to the team, highlighting risks and benefits.
-2. **Act with speed and simplicity**:
-   - During a production outage, focusing on quickly identifying and fixing the root cause instead of optimizing non-critical areas of the code.
-3. **Focus resources on what matters most**:
-   - If a product needs to launch quickly, can focuse on developing key features based on user feedback, instead of spending time on secondary functionalities, following an agile methodology to prioritize tasks in sprints based on importance.
-
-
-
-### Adapt Quickly, Always Learn
-
-1. **Innovate with curiosity and purpose**:
-   - Can optimizing legacy code with new approaches, achieving a 20% even more improvement in runtime speed.
-2. **Experiment with a passion for learning**:
-   - Can Share findings with the team and implementing best practices based on experimentation.
-3. **Demonstrate flexibility**:
-   - Taking over tasks from another module during a team resource shortage, even when it falls outside my usual expertise, Learning the required skills quickly and completing the module within short time to ensure timely delivery.
-
-
-
-### Unlock the potential of our people
-
-1. **Inspire with humility, empathy, and inclusivity**:
-   - ensures everyone has the chance to speak, listens actively to feedback from junior developers or new hires, and acknowledges their contributions, regardless of their seniority.
-2. **Empower and coach to help others be their best**:
-   - pairs with a junior developer to guide them through solving a complex bug, explaining the technical and business logics and best practices rather than directly fixing the issue.This not only resolves the problem but also equips the junior developer with skills to handle similar challenges independently in the future.
-
-1. **Hold ourselves and others accountable**:
-   - Ensure that myown development tasks are completed on time and with high quality, help the team improve overall efficiency and project success through better planning processes.
-
-### Speak Up for the Good of Company
-
-1. **Debate with passion and act as one team**:
-   - During architecture design discussions, can share myown opinion and debates the best solution with the team while maintaining collaboration and respect.
-2. **Seek and include diverse perspectives**:
-   - Inviting members from other teams (e.g., BA, QA) to participate in implemention/dev test discussions to ensure the proposed solution/output addresses all business needs, Reduced requirement mismatches, shortening the development cycle.
-3. **Have the courage to challenge the status quo**:
-   - Proposing to abandon traditional object-oriented design patterns for specific business requirements and instead adopting a functional programming approach to fully leverage Spark’s distributed computing capabilities. For instance, using immutable data structures, higher-order functions, and Spark's built-in transformations instead of custom object-oriented logic.After implementing the functional programming approach, the pipeline execution time decreased, memory usage was optimized due to immutability, and the codebase became more concise and easier to debug, aligning with Spark's strengths in distributed and parallel processing.
+git rebase v7.5.2 (This aligns the development foundation of Feature A with the latest production code).
