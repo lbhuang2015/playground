@@ -1,0 +1,11 @@
+mcp[cli]
+langchain
+langchain-core
+langchain-community
+langgraph
+python-dotenv
+# Providers for flexibility
+langchain-openai
+langchain-anthropic
+langchain-google-genai
+numpy
