@@ -131,3 +131,25 @@ if (ta.crossunder(time, timestamp("America/New_York", year, month, dayofmonth, 1
 plot(strategy.position_size != 0 ? active_sl : na, "SL/BE_Line", color=color.new(color.red, 40), style=plot.style_linebr, linewidth=2)
 plot(vwap_val, "VWAP", color=color.new(color.orange, 50), linewidth=2)
 plot(exit_ema, "EMA20_Exit", color=color.new(color.blue, 60))
+
+
+
+import requests
+
+url = "http://127.0.0.1:11434/v1/chat/completions"
+data = {
+    "model": "gemma3:27b",
+    "messages": [{"role": "user", "content": "测试连接，请回复：连接成功"}],
+    "stream": False
+}
+
+try:
+    response = requests.post(url, json=data)
+    if response.status_code == 200:
+        print("✅ 连接成功！")
+        print("模型回复:", response.json()['choices'][0]['message']['content'])
+    else:
+        print(f"❌ 连接失败，状态码: {response.status_code}")
+        print(response.text)
+except Exception as e:
+    print(f"🚨 发生错误: {e}")
