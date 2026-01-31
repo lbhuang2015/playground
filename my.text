@@ -135,21 +135,37 @@ plot(exit_ema, "EMA20_Exit", color=color.new(color.blue, 60))
 
 
 import requests
+import json
+import sys
 
-url = "http://127.0.0.1:11434/v1/chat/completions"
-data = {
-    "model": "gemma3:27b",
-    "messages": [{"role": "user", "content": "测试连接，请回复：连接成功"}],
-    "stream": False
-}
+def run_test():
+    url = "http://127.0.0.1:11434/v1/chat/completions"
+    payload = {
+        "model": "gemma3:27b",
+        "messages": [{"role": "user", "content": "Ping!"}],
+        "stream": False
+    }
 
-try:
-    response = requests.post(url, json=data)
-    if response.status_code == 200:
-        print("✅ 连接成功！")
-        print("模型回复:", response.json()['choices'][0]['message']['content'])
-    else:
-        print(f"❌ 连接失败，状态码: {response.status_code}")
-        print(response.text)
-except Exception as e:
-    print(f"🚨 发生错误: {e}")
+    print("--- 正在发起连接测试 ---")
+    try:
+        # 发起请求
+        response = requests.post(url, json=payload, timeout=60)
+        
+        # 检查 HTTP 状态码
+        if response.status_code == 200:
+            content = response.json()['choices'][0]['message']['content']
+            print("✅ 成功连通 Ollama！")
+            print(f"模型回复: {content}")
+        else:
+            print(f"❌ 服务器返回了错误码: {response.status_code}")
+            print(f"错误详情: {response.text}")
+
+    except requests.exceptions.ConnectionError:
+        print("🚨 错误: 无法连接到 Ollama。请确保 Ollama 正在运行且没有被防火墙拦截。")
+    except Exception as e:
+        print(f"🚨 发生未知错误: {type(e).__name__}: {e}")
+
+# 【关键】确保脚本被运行时会直接执行函数
+if __name__ == "__main__":
+    run_test()
+    input("\n按回车键退出...") # 防止窗口闪退，让你看清结果
