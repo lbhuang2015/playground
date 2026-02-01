@@ -171,26 +171,34 @@ if __name__ == "__main__":
     input("\n按回车键退出...") # 防止窗口闪退，让你看清结果
 
 
-**arget:** Refactor the log-parsing tool to extract Spark Stage Metrics (Summary & Executor Aggregates) and implement a "Skewness Filter."
+**Target:** Refactor the Log Analysis Tool to generate a "Compact Performance Profile" and disable fragmenting/chunking.
 
 **Instructions:**
 
-Please modify the file-reading tool to implement a **Metrics-First Analysis** strategy. Instead of returning raw log segments, the tool should perform a single-pass scan of the Spark log to extract structured performance data.
+Modify the Spark log parsing tool to output a highly condensed, single-document summary of skewed stages. The goal is to keep the total output under **8,000 characters** to ensure the LLM can process the entire job context in a single inference pass.
 
 **Requirements:**
 
-1. **Metric Extraction:**
-   - For each completed Stage, extract the data typically found in the Spark UI **"Summary Metrics for Completed Tasks"** (specifically: Min, 25th percentile, Median, 75th percentile, Max for Duration, Input Size, and Shuffle Read).
-   - Extract **"Aggregated Metrics by Executor"** (specifically: Executor ID, Total Tasks, Failed Tasks, Succeeded Tasks, Input Size, and Shuffle Write).
-2. **Skewness Calculation & Filtering:**
-   - Calculate the **Skewness Ratio** for each Stage: $Ratio = \frac{Max(Duration)}{Median(Duration)}$.
-   - **Filter Logic:** Discard data for all Stages where the $Ratio < 3$.
-   - Only retain and return the metrics for "Outlier Stages" (those with a ratio $\geq 3$), as these represent significant performance bottlenecks or data skew.
-3. **Efficiency Constraints:**
-   - The tool must handle files up to 1.5GB. Use **streaming/line-by-line processing** to minimize memory footprint.
-   - Do not use LLM for the initial extraction. Use Python Regex and primitive data structures for speed.
-4. **Output Format:**
-   - Return a structured **Markdown Table** summary for the identified outlier stages.
-   - Include a brief section for each outlier stage showing the **Aggregated Metrics by Executor** to help identify if specific executors are underperforming.
+1. **Strict Context Consolidation:**
+   - **Disable all chunking/fragmenting logic.** Do not split the output into 4000-character segments. The LLM must receive all skewed stages in one message to perform comparative analysis.
+2. **Aggressive Data Condensation:**
+   - **Use Abbreviated Headers:** Rename metrics to save space (e.g., `Duration` -> `Dur`, `Input Size` -> `In`, `Shuffle Read` -> `ShRead`, `Shuffle Write` -> `ShWrite`).
+   - **Statistical Distribution Only:** For "Summary Metrics for Completed Tasks," only output five key data points: **[Min, P25, P50, P75, Max]**. Do not include task counts or individual task IDs.
+   - **Executor Outlier Summary:** Instead of listing all executors, only list the **Top 3 Slowest** and **Top 2 Fastest** executors for each outlier stage. This highlights the gap without bloating the text.
+3. **Refined Filtering:**
+   - Only process stages where $Max(Duration) / Median(Duration) > 3$.
+   - If multiple stages are skewed, sort them by **Total Duration** (descending) so the most impactful bottleneck appears first.
+4. **Formatting for LLM Efficiency:**
+   - Use a **compact Markdown Table** format.
+   - Use scientific notation or simplified units (e.g., `1.5GB` instead of `1,610,612,736 bytes`).
+   - Round all durations to **1 decimal place** (e.g., `12.4s`).
 
-**Goal:** Provide the LLM with a condensed "Performance Profile" of only the problematic stages to allow for high-speed, high-accuracy diagnosis on a CPU-bound environment.
+**Example of Desired Compact Output:**
+
+```
+| Stage | Tasks | Dur(Min/P50/Max) | In | ShRead | SkewRatio |
+|-------|-------|------------------|----|--------|-----------|
+| 12    | 2000  | 0.1s/1.2s/45.0m  | 8G | 2G     | 2250.0x   |
+```
+
+**Goal:** Produce a single, comprehensive "Performance Snapshot" that fits within the LLM's high-speed attention window (approx. 8k-10k chars) to enable a definitive diagnosis in under 60 seconds on a CPU-bound environment.
