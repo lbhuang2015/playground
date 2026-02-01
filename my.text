@@ -169,3 +169,28 @@ def run_test():
 if __name__ == "__main__":
     run_test()
     input("\n按回车键退出...") # 防止窗口闪退，让你看清结果
+
+
+**arget:** Refactor the log-parsing tool to extract Spark Stage Metrics (Summary & Executor Aggregates) and implement a "Skewness Filter."
+
+**Instructions:**
+
+Please modify the file-reading tool to implement a **Metrics-First Analysis** strategy. Instead of returning raw log segments, the tool should perform a single-pass scan of the Spark log to extract structured performance data.
+
+**Requirements:**
+
+1. **Metric Extraction:**
+   - For each completed Stage, extract the data typically found in the Spark UI **"Summary Metrics for Completed Tasks"** (specifically: Min, 25th percentile, Median, 75th percentile, Max for Duration, Input Size, and Shuffle Read).
+   - Extract **"Aggregated Metrics by Executor"** (specifically: Executor ID, Total Tasks, Failed Tasks, Succeeded Tasks, Input Size, and Shuffle Write).
+2. **Skewness Calculation & Filtering:**
+   - Calculate the **Skewness Ratio** for each Stage: $Ratio = \frac{Max(Duration)}{Median(Duration)}$.
+   - **Filter Logic:** Discard data for all Stages where the $Ratio < 3$.
+   - Only retain and return the metrics for "Outlier Stages" (those with a ratio $\geq 3$), as these represent significant performance bottlenecks or data skew.
+3. **Efficiency Constraints:**
+   - The tool must handle files up to 1.5GB. Use **streaming/line-by-line processing** to minimize memory footprint.
+   - Do not use LLM for the initial extraction. Use Python Regex and primitive data structures for speed.
+4. **Output Format:**
+   - Return a structured **Markdown Table** summary for the identified outlier stages.
+   - Include a brief section for each outlier stage showing the **Aggregated Metrics by Executor** to help identify if specific executors are underperforming.
+
+**Goal:** Provide the LLM with a condensed "Performance Profile" of only the problematic stages to allow for high-speed, high-accuracy diagnosis on a CPU-bound environment.
