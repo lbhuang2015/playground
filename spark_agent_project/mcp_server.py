@@ -1,193 +1,172 @@
 import os
+import sys
 import json
-import subprocess
+import re
+import logging
+from typing import Dict, Any
 import numpy as np
-from typing import List, Dict, Any
+from smart_open import open as smart_open
+from dateutil.parser import parse as parse_date
+
 from mcp.server.fastmcp import FastMCP
 
-# Initialize MCP Server
-mcp = FastMCP("SparkDiagnosticServer")
+# --- Basic Setup ---
+logging.basicConfig(level=logging.INFO, stream=sys.stderr, format='%(message)s')
+mcp = FastMCP("SparkLogMerger")
 
-def _read_hdfs_file(path: str) -> Any:
-    """
-    Generator that reads a file from HDFS line by line.
+# --- Helper Functions ---
+def format_ms(ms: float) -> str:
+    if ms < 1000: return f"{ms:.0f}ms"
+    s = ms / 1000
+    if s < 60: return f"{s:.1f}s"
+    return f"{(s / 60):.1f}min"
+
+def format_bytes(b: float) -> str:
+    if b < 1024: return f"{b:.0f}B"
+    kb = b / 1024
+    if kb < 1024: return f"{kb:.1f}KB"
+    mb = kb / 1024
+    if mb < 1024: return f"{mb:.1f}MB"
+    return f"{(mb / 1024):.1f}GB"
+
+# --- Core Logic ---
+
+def _index_event_log(path: str) -> (Dict[int, Dict[str, Any]], str):
+    logging.info(f"[STAGE: PRE-PROCESSING] Scanning Spark EventLog via Python Streamer: {path}")
+    stages: Dict[int, Dict[str, Any]] = {}
     
-    PERFORMANCE NOTE FOR 1T+ DATA:
-    For extremely large log files, we should avoid loading the entire file into RAM.
-    This function uses a generator to yield lines one by one.
-    
-    In a real production environment with massive logs:
-    1. Use `hdfs dfs -tail` if only the end of the log is relevant (though EventLogs require full scan for aggregation).
-    2. If full scan is needed, streaming via stdout pipe (as done here) is memory efficient.
-    3. For Driver logs, consider reading only the last N KB using `hdfs dfs -cat` with range or `tail`.
-    """
-    
-    # Check if it's a local file (for testing) or HDFS path
-    if path.startswith("hdfs://") or path.startswith("/"):
-        # Try using HDFS command
-        cmd = ["hdfs", "dfs", "-cat", path]
+    app_id_match = re.search(r'(application_[0-9]+_[0-9]+)', path)
+    app_id = app_id_match.group(1) if app_id_match else "UnknownApp"
+
+    file_size = os.path.getsize(path) if os.path.exists(path) else 0
+    bytes_read = 0
+    last_reported_progress = -1
+
+    for line in smart_open(path, 'r', encoding='utf-8', errors='ignore'):
+        bytes_read += len(line.encode('utf-8'))
+        if file_size > 0:
+            progress = int((bytes_read / file_size) * 100)
+            if progress > last_reported_progress and progress % 10 == 0:
+                logging.info(f"[PROGRESS] {format_bytes(bytes_read)}/{format_bytes(file_size)} processed ({progress}%)...")
+                last_reported_progress = progress
+
         try:
-            # Popen allows streaming stdout
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            event = json.loads(line)
+        except json.JSONDecodeError: continue
             
-            # Yield lines as they come
-            if process.stdout:
-                for line in process.stdout:
-                    yield line
-            
-            process.stdout.close()
-            return_code = process.wait()
-            if return_code != 0:
-                # Fallback or error handling
-                pass
-        except FileNotFoundError:
-            # Fallback for local testing if 'hdfs' command not found
-            if os.path.exists(path):
-                 with open(path, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        yield line
-            else:
-                return []
-    else:
-        # Assume local relative path
-        if os.path.exists(path):
-             with open(path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    yield line
+        event_type = event.get("Event")
+        stage_id = event.get("Stage ID")
 
-@mcp.tool()
-def get_stage_metrics(app_id: str) -> str:
-    """
-    Retrieves performance metrics for each Spark stage by parsing the event log.
-    
-    Args:
-        app_id: The Spark Application ID (e.g., application_123456_0001).
+        if stage_id is not None and stage_id not in stages:
+            stages[stage_id] = {
+                "tasks_durations": [], "submissionTime": None, "completionTime": None,
+                "inputBytes": 0, "outputBytes": 0, "shuffleWrite": 0, "spill_disk": 0, "spill_mem": 0,
+                "driver_logs": [], "skewRatio": 1.0
+            }
         
-    Returns:
-        JSON string containing metrics per stage: 
-        - duration stats (min, median, max)
-        - skew ratio (max / median)
-        - total shuffle read bytes
-        - total disk spill bytes
-    """
-    # In a real scenario, construct path based on config
-    # For demo, we assume the log is at /tmp/{app_id}.json or similar HDFS path
-    # log_path = f"{os.environ.get('SPARK_EVENT_LOG_DIR', '/tmp/spark-events')}/{app_id}"
-    log_path = f"{app_id}" # Simulating passing the full path or ID for simplicity
+        if event_type == "SparkListenerStageSubmitted":
+            stages[stage_id]["submissionTime"] = event.get("Stage Info", {}).get("Submission Time", 0)
+        
+        elif event_type == "SparkListenerTaskEnd":
+            stages[stage_id]["tasks_durations"].append(event.get("Task Info", {}).get("Duration", 0))
+            metrics = event.get("Task Metrics", {})
+            if metrics:
+                stages[stage_id]["inputBytes"] += metrics.get("Input Metrics", {}).get("Bytes Read", 0)
+                stages[stage_id]["outputBytes"] += metrics.get("Output Metrics", {}).get("Bytes Written", 0)
+                stages[stage_id]["spill_mem"] += metrics.get("Memory Bytes Spilled", 0)
+                stages[stage_id]["spill_disk"] += metrics.get("Disk Bytes Spilled", 0)
 
-    stage_data = {}
+        elif event_type == "SparkListenerStageCompleted":
+            stages[stage_id]["completionTime"] = event.get("Stage Info", {}).get("Completion Time", 0)
+    
+    for stage_id, data in stages.items():
+        if len(data["tasks_durations"]) > 1:
+            median_duration = np.median(data["tasks_durations"])
+            if median_duration > 0:
+                data["skewRatio"] = np.max(data["tasks_durations"]) / median_duration
+    
+    logging.info(f"[DEBUG] EventLog indexing complete. Found {len(stages)} stages.")
+    return stages, app_id
 
-    try:
-        for line in _read_hdfs_file(log_path):
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
+def _align_driver_log(path: str, stages: Dict[int, Dict[str, Any]]):
+    logging.info(f"[DEBUG] Streaming DriverLog for alignment: {path}...")
+    matched_events = 0
+    
+    ts_regex = re.compile(r'^(\d{2}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})')
+    stage_id_regex = re.compile(r'Stage (\d+)')
+    keywords = ["WARN", "ERROR", "FATAL", "ExecutorLost", "FetchFailed", "Spilling", "GC time", "TaskSetManager", "OOM"]
+
+    for line in smart_open(path, 'r', encoding='utf-8', errors='ignore'):
+        if not any(kw in line for kw in keywords): continue
+
+        clean_line = line.strip().replace("`", "'" ).replace("|", "-")
+        
+        stage_match = stage_id_regex.search(clean_line)
+        if stage_match:
+            stage_id = int(stage_match.group(1))
+            if stage_id in stages:
+                stages[stage_id]["driver_logs"].append(clean_line)
+                matched_events += 1
                 continue
 
-            if event.get("Event") == "SparkListenerTaskEnd":
-                stage_id = event["Stage ID"]
-                task_info = event.get("Task Info", {})
-                task_metrics = event.get("Task Metrics", {})
-                
-                # Duration
-                duration = task_info.get("Duration", 0)
-                
-                # Shuffle Read
-                shuffle_metrics = task_metrics.get("Shuffle Read Metrics", {})
-                remote_read = shuffle_metrics.get("Remote Bytes Read", 0)
-                local_read = shuffle_metrics.get("Local Bytes Read", 0)
-                total_read = remote_read + local_read
-                
-                # Disk Spill
-                memory_bytes_spilled = task_metrics.get("Memory Bytes Spilled", 0)
-                disk_bytes_spilled = task_metrics.get("Disk Bytes Spilled", 0)
-                
-                if stage_id not in stage_data:
-                    stage_data[stage_id] = {
-                        "durations": [],
-                        "total_shuffle_read": 0,
-                        "total_disk_spill": 0
-                    }
-                
-                stage_data[stage_id]["durations"].append(duration)
-                stage_data[stage_id]["total_shuffle_read"] += total_read
-                stage_data[stage_id]["total_disk_spill"] += disk_bytes_spilled
-
-    except Exception as e:
-        return f"Error reading logs for {app_id}: {str(e)}"
-
-    # Aggregate results
-    results = {}
-    for stage_id, data in stage_data.items():
-        durations = data["durations"]
-        if not durations:
-            continue
-            
-        _min = np.min(durations)
-        _median = np.median(durations)
-        _max = np.max(durations)
-        
-        # Avoid division by zero
-        skew_ratio = (_max / _median) if _median > 0 else 1.0
-        
-        results[f"Stage {stage_id}"] = {
-            "duration_min_ms": float(_min),
-            "duration_median_ms": float(_median),
-            "duration_max_ms": float(_max),
-            "skew_ratio": float(round(skew_ratio, 2)),
-            "total_shuffle_read_mb": float(round(data["total_shuffle_read"] / (1024 * 1024), 2)),
-            "total_disk_spill_mb": float(round(data["total_disk_spill"] / (1024 * 1024), 2))
-        }
-
-    return json.dumps(results, indent=2)
+        ts_match = ts_regex.match(clean_line)
+        if ts_match:
+            try:
+                log_ts = parse_date(ts_match.group(1)).timestamp() * 1000
+                for stage_id, data in stages.items():
+                    if data["submissionTime"] and data["completionTime"] and (data["submissionTime"] <= log_ts <= data["completionTime"]):
+                        stages[stage_id]["driver_logs"].append(clean_line)
+                        matched_events += 1
+                        break
+            except Exception: continue
+    
+    logging.info(f"[DEBUG] DriverLog alignment complete. Matched {matched_events} critical events.")
+    return stages
 
 @mcp.tool()
-def get_driver_logs(app_id: str) -> str:
+def generate_merged_context(event_log_path: str, driver_log_path: str) -> str:
     """
-    Searches Driver logs for common errors and performance warnings.
-    
-    Args:
-        app_id: The Spark Application ID.
-        
-    Returns:
-        A summary string of found issues or extracted log lines.
+    Performs a single-pass, streaming merge of Spark logs to generate a 
+    high-density context for LLM analysis.
     """
-    # log_path = f"{os.environ.get('SPARK_DRIVER_LOG_DIR', '/tmp/spark-driver-logs')}/{app_id}"
-    log_path = f"{app_id}.driver" # Simulating convention
-    
-    keywords = [
-        "ERROR", 
-        "Exception", 
-        "Spill to disk", 
-        "V2ScanPartitioningAndOrdering",
-        "OutOfMemoryError",
-        "Timeout"
-    ]
-    
-    found_lines = []
-    
     try:
-        # Optimization: In real world, might only read stderr or last N lines
-        for line in _read_hdfs_file(log_path):
-            for kw in keywords:
-                if kw in line:
-                    # Truncate line if too long to save token context
-                    clean_line = line.strip()[:500]
-                    found_lines.append(f"[{kw}] {clean_line}")
-                    break
-                    
-            if len(found_lines) > 50:
-                found_lines.append("... (Too many errors, truncated) ...")
-                break
-                
+        stages, app_id = _index_event_log(event_log_path)
+        stages = _align_driver_log(driver_log_path, stages)
     except Exception as e:
-        return f"Error reading driver logs: {str(e)}"
+        logging.error(f"ERROR during log processing: {e}")
+        return f"ERROR: Log processing failed: {e}"
+
+    problem_stages = []
+    for stage_id, data in stages.items():
+        if data["skewRatio"] > 3.0 or data["spill_disk"] > 0 or len(data["driver_logs"]) > 0:
+            problem_stages.append({
+                "StageID": stage_id,
+                "SkewRatio": f"{data['skewRatio']:.1f}",
+                "Duration": format_ms(np.median(data['tasks_durations'])) if data['tasks_durations'] else "N/A",
+                "Input/Output": f"{format_bytes(data['inputBytes'])}/{format_bytes(data['outputBytes'])}",
+                "Spill(M/D)": f"{format_bytes(data['spill_mem'])}/{format_bytes(data['spill_disk'])}",
+                "Driver Annotations": " ".join(data["driver_logs"])
+            })
+
+    if not problem_stages:
+        return f"INFO: No significant performance issues found for {app_id} based on specified thresholds."
+
+    # Build Markdown table, respecting character limit
+    output = ""
+    output += "| StageID | SkewRatio | Duration | Input/Output | Spill(M/D) | Driver Annotations |\n"
+    output += "|---|---|---|---|---|---|
+"
+
+    char_limit = 7500 # Leave some buffer for other text
+    
+    for stage in sorted(problem_stages, key=lambda x: x["StageID"]):
+        row_str = f"| {stage['StageID']} | {stage['SkewRatio']} | {stage['Duration']} | {stage['Input/Output']} | {stage['Spill(M/D)']} | {stage['Driver Annotations'][:200]} |\n"
+        if len(output) + len(row_str) > char_limit:
+            logging.warning("[WARN] Output truncated to respect character limit (<8k). Not all stages may be shown.")
+            break
+        output += row_str
         
-    if not found_lines:
-        return "No critical errors or warnings found in Driver logs."
-        
-    return "\n".join(found_lines)
+    return output
 
 if __name__ == "__main__":
-    # The server typically runs over stdio when used by a local client
     mcp.run()

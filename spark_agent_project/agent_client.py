@@ -1,180 +1,129 @@
 import os
 import sys
 import asyncio
-from typing import Literal, Annotated
-
+import logging
 from dotenv import load_dotenv
-from langchain.chat_models import init_chat_model
-from langchain_core.messages import HumanMessage, SystemMessage, BaseMessage
-from langchain_core.tools import StructuredTool
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import StateGraph, MessagesState, START, END
-from langgraph.prebuilt import ToolNode
+from langchain_community.chat_models import init_chat_model
+from langchain_core.messages import SystemMessage
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+from mcp.client.stdio import stdio_client, StdioServerParameters
+from mcp.client.session import ClientSession
 
-# Load environment variables
+# --- Basic Setup ---
 load_dotenv()
+logging.basicConfig(level=logging.INFO, stream=sys.stdout, format='%(message)s')
 
 # --- Configuration ---
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
-MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o")
-API_KEY = os.getenv("API_KEY")
-
-if not API_KEY:
-    print("Warning: API_KEY not set in .env. LLM calls may fail.")
+MODEL_NAME = os.getenv("MODEL_NAME", "llama3")
+API_KEY = os.getenv("OPENAI_API_KEY")
+BASE_URL = os.getenv("OPENAI_API_BASE")
+EVENT_LOG_PATH = os.getenv("EVENT_LOG_PATH")
+DRIVER_LOG_PATH = os.getenv("DRIVER_LOG_PATH")
 
 # --- System Prompt ---
-SYSTEM_PROMPT = """You are an expert Spark Performance Tuning Agent. 
-Your goal is to analyze Spark application logs and provide actionable optimization advice.
+SYSTEM_PROMPT_TEMPLATE = """
+## 1. Core Operational Principles
+- **Hardware-Aware Execution**: Operating in a restricted CPU environment without admin privileges. **Prohibit** raw processing of 1.4GB logs via LLM. A "Pre-process then Diagnose" strategy is mandatory.
+- **Total Transparency (Telemetry)**: During execution, the Agent MUST output real-time `[STAGE: XXX]` logs to eliminate "black-box" silence during long CPU-bound tasks.
+- **Causal Alignment**: All diagnoses must be derived from the cross-verification of **EventLog Metrics** and **DriverLog Events**.
 
-Follow this reasoning framework:
-1. **Diagnosis**: First, gather facts using available tools. 
-   - If the user asks "why is it slow", check `get_stage_metrics` first.
-   - Check `get_driver_logs` for errors.
-2. **Analysis**:
-   - **Data Skew**: If a Stage's Skew Ratio (Max/Median duration) > 5, this is a strong indicator of data skew.
-   - **Memory/Spill**: If `total_disk_spill_mb` > 0, the task is running out of execution memory. Suggest increasing `spark.executor.memory` or tuning `spark.memory.fraction`.
-   - **Shuffle**: If shuffle read is huge, suggest broadcasting smaller tables or optimizing joins.
-   - **Committer**: If tasks are fast but the job hangs at the end, check Driver logs for "V2ScanPartitioningAndOrdering" or S3 committer issues.
-3. **Recommendation**: Provide specific configuration changes (e.g., `set spark.sql.shuffle.partitions = 2000`).
+## 2. Workflow Execution Stages
+### Stage 1: Multi-Source Data Stitching (MCP Tool)
+Invoke the `generate_merged_context` MCP tool to perform a "dehydrated" stitch of the logs.
+- **Inputs**: `event_log_path`, `driver_log_path`
+- **Output Requirement**: A single, high-density Markdown table (< 8,000 characters) containing aligned metrics for `SkewRatio`, `Spill`, `GC Time`, and corresponding `Driver Warnings`.
 
-General Rules:
-- Parallelism (partitions) should generally be 2-3x the total number of cores.
-- For 1T+ datasets, suggest enabling Off-Heap memory.
-- Be concise but technical.
+### Stage 2: Expert Reasoning & Correlation
+Upon receiving the stitched data, you must apply the following **"Anomaly Mapping Matrix"**:
+
+| **Observed Patterns (Metrics + Logs)**       | **Root Cause Diagnosis**                      | **Actionable Fix (Part 3)**                                  |
+| -------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------ |
+| **High Skew** + **ExecutorLost/OOM**         | Data skew causing physical memory crash.      | Enable `skewJoin`, increase `memory.overhead`, implement `Salting`. |
+| **High Skew** + **Disk Spill**               | Data skew forcing I/O degradation.            | Adjust `memory.fraction`, increase `executor.memory`.        |
+| **Low Skew** + **Speculation/Task Resubmit** | Environmental Straggler (Node inconsistency). | Adjust `speculation.multiplier`, inspect specific Node health. |
+| **Any Metric** + **GC Time > 10%**           | Heap pressure or high object churn.           | Switch to `G1GC`, reduce `executor.cores` per executor.      |
+
+## 3. Output Report Specification
+The response must be structured into exactly three parts:
+
+### Part 1: Performance Metrics Table
+List all Stages with $SkewRatio > 3$ or those containing `ERROR/WARN` logs.
+```
+| StageID | SkewRatio | Duration | Input/Output | Spill(M/D) | Driver Annotations |
+```
+
+### Part 2: Core Root Cause Analysis
+- Provide a bulleted synthesis explaining the "Why."
+- **Example**: "Stage 12 is the primary bottleneck due to a massive SkewRatio (45x). The DriverLog confirms OOM errors on Executor 4, suggesting a skewed join key during the shuffle phase."
+
+### Part 3: Actionable Optimization Recommendations
+Provide "surgical" advice for each problematic Stage:
+- **Primary Action**: [The most impactful fix]
+- **Spark Config Changes**:
+  - `spark.sql.adaptive.skewJoin.enabled`: `true`
+  - `spark.executor.memoryOverhead`: `2G` (Reason: match with OOM alerts)
+- **Code Strategy**: [Specific coding advice, e.g., "Add salt to the Join Key 'user_id'"]
+
+---
+**STITCHED LOG DATA TO ANALYZE:**
+{merged_context}
 """
 
 async def run_agent():
     # 1. Initialize LLM
     try:
-        model = init_chat_model(MODEL_NAME, model_provider=LLM_PROVIDER)
+        model_kwargs = {"api_key": API_KEY, "base_url": BASE_URL, "temperature": 0.1}
+        model_kwargs = {k: v for k, v in model_kwargs.items() if v}
+        model = init_chat_model(MODEL_NAME, model_provider=LLM_PROVIDER, **model_kwargs)
     except Exception as e:
-        print(f"Error initializing model: {e}")
-        print("Please ensure you have installed the correct provider package (e.g., langchain-openai) and set the API key.")
+        logging.error(f"Error initializing model: {e}")
         sys.exit(1)
 
     # 2. Connect to MCP Server
-    # We run the server script as a subprocess
-    server_params = StdioServerParameters(
-        command="uv", # Or "python" if using venv directly
-        args=["run", "mcp_server.py"], # Assuming 'uv run' handles deps, or just python
-        env=os.environ
-    )
+    server_params = StdioServerParameters(command=sys.executable, args=["mcp_server.py"], env=os.environ)
     
-    # Fallback to python if uv is not desired/available, user can adjust
-    # Check if we are in a virtualenv or just use sys.executable
-    server_params.command = sys.executable
-    server_params.args = ["mcp_server.py"]
-
     async with stdio_client(server_params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
             
-            # 3. Discover Tools via MCP
-            mcp_tools = await session.list_tools()
-            langchain_tools = []
+            logging.info(f"Agent ready! (Model: {MODEL_NAME})")
+            logging.info("---")
 
-            for tool in mcp_tools.tools:
-                # Wrap MCP tool as LangChain StructuredTool
-                # Note: We need to bind the tool execution to the session
-                
-                async def make_tool_func(tool_name):
-                     async def _impl(**kwargs):
-                        return await session.call_tool(tool_name, arguments=kwargs)
-                     return _impl
-                
-                tool_func = await make_tool_func(tool.name)
-                
-                lc_tool = StructuredTool.from_function(
-                    func=None,
-                    coroutine=tool_func,
-                    name=tool.name,
-                    description=tool.description
-                )
-                langchain_tools.append(lc_tool)
+            if not EVENT_LOG_PATH or not DRIVER_LOG_PATH:
+                logging.error("ERROR: EVENT_LOG_PATH and DRIVER_LOG_PATH must be set in your .env file.")
+                return
+
+            # --- STAGE 1: PYTHON PRE-PROCESSING ---
+            merged_context = await session.call_tool(
+                'generate_merged_context', 
+                {'event_log_path': EVENT_LOG_PATH, 'driver_log_path': DRIVER_LOG_PATH}
+            )
+
+            if "ERROR:" in merged_context or "INFO:" in merged_context:
+                logging.info(merged_context)
+                logging.info("\n---")
+                return
             
-            # Bind tools to LLM
-            model_with_tools = model.bind_tools(langchain_tools)
-
-            # 4. Build LangGraph Agent
+            # --- STAGE 2: CONTEXT PREPARATION ---
+            logging.info(f"\n[STAGE: CONTEXT READY] Metrics aligned. Analyzing {len(merged_context.splitlines()) - 2} outlier stages.")
+            final_prompt = SYSTEM_PROMPT_TEMPLATE.format(merged_context=merged_context)
             
-            def agent_node(state: MessagesState):
-                return {"messages": [model_with_tools.invoke(state["messages"])]}
-
-            # Prebuilt ToolNode executes the tools
-            tool_node = ToolNode(langchain_tools)
-
-            def should_continue(state: MessagesState) -> Literal["tools", END]:
-                messages = state["messages"]
-                last_message = messages[-1]
-                if last_message.tool_calls:
-                    return "tools"
-                return END
-
-            workflow = StateGraph(MessagesState)
-            workflow.add_node("agent", agent_node)
-            workflow.add_node("tools", tool_node)
-
-            workflow.add_edge(START, "agent")
-            workflow.add_conditional_edges("agent", should_continue)
-            workflow.add_edge("tools", "agent")
-
-            checkpointer = MemorySaver()
-            app = workflow.compile(checkpointer=checkpointer)
-
-            # 5. Interactive Loop
-            config = {"configurable": {"thread_id": "1"}}
+            # --- STAGE 3: LLM INFERENCE ---
+            logging.info(f"[STAGE: INFERENCE] {MODEL_NAME} is diagnosing the bottleneck (CPU Mode)...")
             
-            print(f"Agent ready! (Model: {MODEL_NAME})")
-            print("Enter a Spark App ID or a question (type 'exit' to quit).")
-
-            # Initial greeting context
-            # await app.ainvoke({"messages": [SystemMessage(content=SYSTEM_PROMPT)]}, config)
-            # Actually, better to prepend system prompt to subsequent calls or handle state init
+            messages = [SystemMessage(content=final_prompt)]
+            try:
+                async for chunk in model.astream(messages):
+                    print(chunk.content, end="", flush=True)
+            except Exception as e:
+                logging.error(f"\n[ERROR] Inference failed: {e}")
             
-            # We inject system prompt by adding it to the history once or prepending it
-            # For simplicity, we just assume the first turn sets it up or we pass it every time if the model supports it.
-            # LangGraph's MessagesState appends. Let's add the SystemPrompt manually at the start of conversation.
-            
-            print("---")
-            
-            # Pre-seed system message
-            # Note: We do this by manually managing the state update on first run if needed,
-            # or just letting the user start and we insert the system prompt in the logic.
-            # Here we will insert it as the first message of the conversation.
-            
-            first_run = True
-
-            while True:
-                try:
-                    user_input = input("User: ")
-                except EOFError:
-                    break
-                    
-                if user_input.lower() in ["exit", "quit", "q"]:
-                    break
-                
-                inputs = {"messages": [HumanMessage(content=user_input)]}
-                if first_run:
-                    inputs = {"messages": [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=user_input)]}
-                    first_run = False
-
-                async for event in app.astream(inputs, config, stream_mode="values"):
-                    # Stream the last message content to show progress
-                    message = event["messages"][-1]
-                    if isinstance(message, BaseMessage) and message.content:
-                        # Only print if it's from AI and has content (not just tool call)
-                        # But in 'values' mode we get the full state.
-                        # Simplified print logic:
-                        pass
-                
-                # Print final response
-                final_state = app.get_state(config)
-                last_msg = final_state.values["messages"][-1]
-                print(f"Agent: {last_msg.content}")
-                print("---")
+            logging.info("\n\n---")
+            logging.info("Analysis complete.")
 
 if __name__ == "__main__":
-    asyncio.run(run_agent())
+    try:
+        asyncio.run(run_agent())
+    except KeyboardInterrupt:
+        print("\nAgent stopped by user.")
