@@ -7,12 +7,19 @@ from typing import Dict, Any
 import numpy as np
 from smart_open import open as smart_open
 from dateutil.parser import parse as parse_date
+from dotenv import load_dotenv
 
 from mcp.server.fastmcp import FastMCP
 
 # --- Basic Setup ---
+load_dotenv()
 logging.basicConfig(level=logging.INFO, stream=sys.stderr, format='%(message)s')
 mcp = FastMCP("SparkLogMerger")
+
+# --- Path Configuration ---
+EVENT_LOG_DIR = os.getenv("SPARK_EVENT_LOG_DIR", "/tmp/spark-events")
+DRIVER_LOG_DIR = os.getenv("SPARK_DRIVER_LOG_DIR", "/tmp/spark-driver-logs")
+
 
 # --- Helper Functions ---
 def format_ms(ms: float) -> str:
@@ -31,12 +38,9 @@ def format_bytes(b: float) -> str:
 
 # --- Core Logic ---
 
-def _index_event_log(path: str) -> (Dict[int, Dict[str, Any]], str):
+def _index_event_log(path: str, app_id: str) -> Dict[int, Dict[str, Any]]:
     logging.info(f"[STAGE: PRE-PROCESSING] Scanning Spark EventLog via Python Streamer: {path}")
     stages: Dict[int, Dict[str, Any]] = {}
-    
-    app_id_match = re.search(r'(application_[0-9]+_[0-9]+)', path)
-    app_id = app_id_match.group(1) if app_id_match else "UnknownApp"
 
     file_size = os.path.getsize(path) if os.path.exists(path) else 0
     bytes_read = 0
@@ -86,7 +90,7 @@ def _index_event_log(path: str) -> (Dict[int, Dict[str, Any]], str):
                 data["skewRatio"] = np.max(data["tasks_durations"]) / median_duration
     
     logging.info(f"[DEBUG] EventLog indexing complete. Found {len(stages)} stages.")
-    return stages, app_id
+    return stages
 
 def _align_driver_log(path: str, stages: Dict[int, Dict[str, Any]]):
     logging.info(f"[DEBUG] Streaming DriverLog for alignment: {path}...")
@@ -99,7 +103,7 @@ def _align_driver_log(path: str, stages: Dict[int, Dict[str, Any]]):
     for line in smart_open(path, 'r', encoding='utf-8', errors='ignore'):
         if not any(kw in line for kw in keywords): continue
 
-        clean_line = line.strip().replace("`", "'" ).replace("|", "-")
+        clean_line = line.strip().replace("`", "'").replace("|", "-")
         
         stage_match = stage_id_regex.search(clean_line)
         if stage_match:
@@ -124,17 +128,23 @@ def _align_driver_log(path: str, stages: Dict[int, Dict[str, Any]]):
     return stages
 
 @mcp.tool()
-def generate_merged_context(event_log_path: str, driver_log_path: str) -> str:
+def generate_merged_context(app_id: str) -> str:
     """
-    Performs a single-pass, streaming merge of Spark logs to generate a 
+    Performs a streaming merge of Spark logs based on an app_id to generate a 
     high-density context for LLM analysis.
     """
+    event_log_path = os.path.join(EVENT_LOG_DIR, f"{app_id}.log")
+    driver_log_path = os.path.join(DRIVER_LOG_DIR, f"{app_id}_driver.log")
+    
     try:
-        stages, app_id = _index_event_log(event_log_path)
+        stages = _index_event_log(event_log_path, app_id)
         stages = _align_driver_log(driver_log_path, stages)
+    except FileNotFoundError as e:
+        logging.error(f"ERROR: Could not find log file. {e}")
+        return f"ERROR: Could not find log file. Please check SPARK_EVENT_LOG_DIR and SPARK_DRIVER_LOG_DIR in your .env file and ensure the log files exist with the correct naming convention. Details: {e}"
     except Exception as e:
-        logging.error(f"ERROR during log processing: {e}")
-        return f"ERROR: Log processing failed: {e}"
+        logging.error(f"An unexpected error occurred: {e}")
+        return f"ERROR: An unexpected error occurred during log processing: {e}"
 
     problem_stages = []
     for stage_id, data in stages.items():
@@ -151,13 +161,12 @@ def generate_merged_context(event_log_path: str, driver_log_path: str) -> str:
     if not problem_stages:
         return f"INFO: No significant performance issues found for {app_id} based on specified thresholds."
 
-    # Build Markdown table, respecting character limit
     output = ""
     output += "| StageID | SkewRatio | Duration | Input/Output | Spill(M/D) | Driver Annotations |\n"
     output += "|---|---|---|---|---|---|
 "
 
-    char_limit = 7500 # Leave some buffer for other text
+    char_limit = 7500
     
     for stage in sorted(problem_stages, key=lambda x: x["StageID"]):
         row_str = f"| {stage['StageID']} | {stage['SkewRatio']} | {stage['Duration']} | {stage['Input/Output']} | {stage['Spill(M/D)']} | {stage['Driver Annotations'][:200]} |\n"
