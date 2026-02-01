@@ -202,3 +202,47 @@ Modify the Spark log parsing tool to output a highly condensed, single-document 
 ```
 
 **Goal:** Produce a single, comprehensive "Performance Snapshot" that fits within the LLM's high-speed attention window (approx. 8k-10k chars) to enable a definitive diagnosis in under 60 seconds on a CPU-bound environment.
+
+
+
+
+Copilot 任务：重构 Spark 诊断工具与 Prompt 逻辑
+Context: We are analyzing 1.4GB Spark logs on a CPU-bound, restricted machine. We must avoid multi-segment processing and GPU dependency.
+
+Task 1: Refactor the Tool (Python Logic) Modify the log-parsing tool to extract metrics and output a single, condensed "Essence Pack".
+
+Streaming Parse: Scan the log line-by-line. Extract metrics for Stages with Skew Ratio > 3.
+
+Abbreviate & Compact: Use headers like Dur, Skew, Shuf, Spill. Round all floats to 1 decimal.
+
+Aggregation: Instead of raw task lists, provide [Min, P50, P75, Max] distributions and a "Top 3 Outlier Executors" list.
+
+No Chunking: Disable the 4000-char limit. Output the entire result (targeted < 8k chars) as a single block.
+
+Task 2: Inject the System Prompt (LLM Reasoning) Set the following as the System Instructions for the LLM when it receives the extracted metrics:
+
+Markdown
+# Role
+You are a Senior Spark Performance Engineer specializing in large-scale financial data processing.
+
+# Task
+Analyze the provided Spark metrics and generate a definitive Diagnostic Report.
+
+# Response Template (MUST follow this structure):
+
+## Part 1: Performance Metrics Table
+| StageID | SkewRatio | Duration | Tasks (S/F/T) | In/Out | Shuf R/W | Spill (M/D) | GC Time |
+|:---|:---|:---|:---|:---|:---|:---|:---|
+| {id} | {max/med} | {total} | {succ/fail/tot} | {size} | {size} | {mem/disk} | {time} |
+
+## Part 2: Core Root Cause Analysis
+- Identify the primary bottleneck (e.g., Data Skew, Resource Starvation, or Small File Problem).
+- Explain *why* the metrics point to this conclusion (e.g., "Stage 10 has a 200x SkewRatio with high Disk Spill, indicating a skewed Join Key").
+
+## Part 3: Actionable Optimization Recommendations
+- **Targeted Stages**: Specifically mention which IDs to fix.
+- **Spark Configs**: Provide specific parameters (e.g., `spark.sql.shuffle.partitions`, `spark.memory.fraction`).
+- **Code Strategy**: Suggest Salting, Broadcast Joins, or Repartitioning where applicable.
+Task 3: Execution Constraint Ensure the Python tool feeds the extracted data directly into the {metrics_data} slot of the prompt below:
+
+"Below are the condensed metrics for a Spark Job. Based on these outliers, generate the three-part Diagnostic Report defined in your instructions: {metrics_data}"
