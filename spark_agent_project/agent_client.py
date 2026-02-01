@@ -106,14 +106,32 @@ async def run_agent():
                 logging.info(f"[STAGE: INFERENCE] {MODEL_NAME} is diagnosing the bottleneck (CPU Mode)...")
                 
                 messages = [SystemMessage(content=final_prompt)]
+                full_report = ""
                 try:
+                    # Stream and accumulate the response
                     async for chunk in model.astream(messages):
-                        print(chunk.content, end="", flush=True)
+                        content = chunk.content
+                        if content:
+                            # Still print in real-time
+                            # print(content, end="", flush=True) 
+                            full_report += content
                 except Exception as e:
                     logging.error(f"\n[ERROR] Inference failed: {e}")
-                
-                logging.info("\n\n---")
+                    continue
+
+                # Print the final, formatted report
+                if full_report:
+                    print("\n" + "="*50)
+                    print("📊 SPARK DIAGNOSTIC REPORT")
+                    print("="*50)
+                    print(full_report)
+                    print("="*50 + "\n")
+                else:
+                    logging.warning("\n[WARN] LLM response was empty.")
+
                 logging.info("Analysis complete.")
+                logging.info("---")
+
 
 if __name__ == "__main__":
     try:
