@@ -1,4 +1,6 @@
 oyzKIkLYbGdMX8Qxezla4YkrEMGOslk14Tz
+kzNDI1NDk1NDc3ODcxNg.G_O6lo.TtsaCa1JLtt5vT_5LAg3Dy363UGgCduaOutTtI
+1469938757221
 //@version=6
 strategy("SPY RTH - Dynamic Bias Master v3", overlay=true, initial_capital=10000, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
 
