@@ -1,3 +1,35 @@
+Python
+import os
+import subprocess
+import requests
+
+def fetch_vault_secrets():
+    # 模拟从 Vault 获取数据
+    url = "https://your-vault-server:8200/v1/secret/data/myapp"
+    headers = {"X-Vault-Token": "your_vault_token_here"}
+    
+    response = requests.get(url, headers=headers).json()
+    secrets = response['data']['data']
+    return secrets['username'], secrets['password']
+
+def main():
+    username, password = fetch_vault_secrets()
+    
+    # 获取当前的系统环境变量字典
+    env = os.environ.copy()
+    
+    # 将从 Vault 拿到的秘密注入到这个字典中
+    env["db_username"] = username
+    env["db_password"] = password
+    
+    # 启动 Java 子进程，并将带有新环境变量的 env 传给它
+    # 这样密码只存在于 Python 和 Java 的进程内存中，绝不落盘，ps 也看不到
+    subprocess.run(["java", "-jar", "my-springboot-app.jar"], env=env)
+
+if __name__ == "__main__":
+    main()
+
+
 import org.apache.spark.api.java.JavaPairRDD;
 import scala.Tuple2;
 import scala.Tuple3;
