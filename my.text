@@ -72,23 +72,3 @@ public class SparkJoinSkewUtils {
 }
 
 
-Hi [Director's Name], hope you're doing well. Diego suggested I reach out to you directly to share some thoughts regarding our recent team dynamics and my current state.
-
-As you know, Victor recently went over Diego to directly task me with leading and driving the IT Risk Vulnerability remediation for our team's 10 applications. This setup has run into some serious issues on the ground:
-
-First, it has created a dual-lead structure within our team. While I'm expected to report directly to Victor on this, our team only has 5 resources (Diego, Sarath, Hariss, Tamojit, and myself), all of whom are already at 100% capacity. As a result, I can't continue the tasks assigned by my direct lead, Diego, and I’m forced to compete with him for resources to get my tasks done. While Diego and I collaborate well and won't have real arguments, this has caused a severe conflict in resources.
-
-Second, this was thrown on me out of nowhere, putting me in a very difficult position. I was already supposed to fully focus on the FED feature development requested by the business. Victor believes AI can handle 80% of the vulnerability work and he thinks that I just need take a bit time to manage the progress. but the reality is quite the opposite—AI can automate code changes, but reviewing and testing those changes still takes massive time and effort.
-
-The hardest part for me is that Victor put the final accountability on my head, making me follow up on and manage the entire remediation, testing, and production deployment. Because of the resource crunch, nothing can go as planned, and everything ultimately falls entirely on me.
-
-For example, I used AI to complete the code fixes for 8 apps by myself and handed them over to Tamojit for configuration and dev testing. But since he is a junior engineer and unfamiliar with the code and business context, progress was extremely slow. In the end, I had to work overtime to complete the AI code review, modifications, and dev testing for EGL and RDL myself. However, I cannot safely handle the other apps because I don't know the business logic details for common-config and reporting-service(these 2 were maintained by DV,but as you know he tranfered to Yuj's team few months ago).
-
-Meanwhile, Varun expressed his frustration and send me message to demand that I have to allocate time for FED development. Varun sometimes directly tasks or pushes individuals in our team (he used to directly demand Diego to do a features implentation too, which I don't think is reasonable). So now, my schedule was already packed with FED development, and on top of that, I have to do the actual implementation for the vulnerability fixes while managing the whole process. My workload has essentially tripled, and I am under immense pressure.
-
-as you know, we had a conversion when you visited Halifax last year, I said my passion and career goals remain firmly on the technical track, rather than managing people. If Victor sets the timeline with Diego, and Diego delegates a specific part—like the RDL and EGL fixes—to me, I would be more than happy to do it, even if it means working overtime. I really hope to hand the management authority back to Diego, since he is our team lead (though Victor told me this vulnerability remediation is strictly on me and will impact the review of my performance (he told me few months ago that there is performance goals he set for me regarding management capabilities)
-
-I’m not sure if Victor’s approach of this time is a one-off case due to the urgency of IT Risk, or if this will become the new normal. Personally, I feel this skip-level management style has caused a major shock to Diego, myself, and the entire FRTB team. Our resources were already tight, and now the original plans are completely disrupted, leaving everyone feeling very frustrated.
-
-I just wanted to bring the full picture and these risks to your visibility. Thank you for your support.
-
