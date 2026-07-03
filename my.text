@@ -72,3 +72,70 @@ public class SparkJoinSkewUtils {
 }
 
 
+
+
+1.which Springboot version are you using in your project? Spring Boot 2.6+ turned this off (spring.main.allow-circular-references=false) Spring Boot 2.6+ disables circular references by default, but this may cause some issues for old code, can you explain what approach developers often use for fix this.
+
+Answer: @Lazy annotation
+how it works
+
+the Underlying Mechanism: When the Spring container instantiates OrderService and scans its constructor, it detects the @Lazy annotation. Instead of looking up or instantiating the real PaymentService, Spring uses CGLIB bytecode manipulation to instantly generate a lightweight Proxy Object and injects it instead.
+
+Breaking the Cycle: Because a virtual proxy is injected, the instantiation of OrderService completes immediately, severing the "A waits for B, B waits for A" deadlock. The actual resolution and instantiation of the real PaymentService are deferred until a method (e.g., paymentService.process()) is explicitly called on the proxy for the first time.
+
+java 17 + 2.5.4/2.6
+
+
+
+
+
+2. if a spring boot application cold start times degrade significantly due to heavy Class-Path scanning and the mass initialization of singleton beans.
+How to optimize it?
+
+(1) By default, @SpringBootApplication scans everything in its current package and sub-packages. If unoptimized internal dependencies or fat JARs fall within this path, Spring uses ASM (a bytecode manipulation framework) to read the metadata of thousands of .class files, heavily consuming CPU and I/O.
+
+answer: Precise Component Scanning
+
+Explicitly narrow down the scan scope using @ComponentScan(basePackages = {...}) and enforce strict conditional loading across custom configurations using @ConditionalOnProperty or @ConditionalOnClass.
+
+精准打击： 通过显式指定 @ComponentScan(basePackages = {"com.yourcompany.service", "com.yourcompany.controller"}) 缩小战场。
+
+条件装配： 大量使用 @ConditionalOnProperty、@ConditionalOnClass。确保只有在特定配置开启或特定类存在时，才去解析对应的 BeanDefinition。
+
+
+
+
+(2) By default, Spring instantiates and injects all singleton beans during the startup stage. For massive microservices connected to multiple databases, caches, and MQ brokers, this can take minutes. 
+answer:
+Global Lazy Initialization
+spring.main.lazy-initialization=true
+
+
+
+3. Kafka guarantees message ordering only within a single partition. If you encounter a severe consumer lag in production and need to scale up your processing throughput dramatically using multi-threading, but you MUST absolutely guarantee the processing order for messages sharing the same business key (e.g., lifecycle events of the same Order_ID)
+"Poll --> Hash Route --> Internal Queues --> Worker Pool"
+
+                 +-------------------+
+                 |   Kafka Cluster   |
+                 +---------+---------+
+                           | Partition 0 (Contains Msg1, Msg2 for Order A)
+                           v
++---------------------------------------------------------------+
+| JVM Consumer Process                                          |
+|                                                               |
+|  [ Kafka Main Thread ]  <-- Only executes lightweight poll()  |
+|           |                                                   |
+|           v                                                   |
+|  [ Internal Hash Router ]  abs(hash(Key)) % Queue_Count       |
+|     /     |     \                                             |
+|    /      |      \                                            |
+|   v       v       v                                           |
+| +----+  +----+  +----+                                        |
+| | Q0 |  | Q1 |  | Q2 |  <-- Bounded In-Memory BlockQueues     |
+| +----+  +----+  +----+                                        |
+|   |       |       |                                           |
+|   v       v       v                                           |
+| [ T0 ]  [ T1 ]  [ T2 ]  <-- Dedicated Single Thread Executors |
++---------------------------------------------------------------+
+
+
