@@ -138,12 +138,20 @@ spring.main.lazy-initialization=true
 | [ T0 ]  [ T1 ]  [ T2 ]  <-- Dedicated Single Thread Executors |
 +---------------------------------------------------------------+
 
-Over the past year, I have actively embedded our core values into every aspect of my work and technical delivery:
+Option 1: 简练有力型 (The Direct & Impactful Summary)最推荐。这段话将你的个人成长与公司的“AI 战略”完美绑定，语言紧凑且极具进取心。
 
-Client First: consistently prioritized end-user impact, ensuring that all functional deliveries directly resolved business pain points and provided a seamless, high-performance experience for our stakeholders.
+Looking ahead, my development roadmap is fully aligned with the company’s strategic push toward an AI-driven future. I will double down on deepening my expertise at the intersection of AI Engineering, Spark/Databricks infrastructure, and core business domain knowledge. By bridging advanced data pipelines with emerging AI capabilities, I aim to future-proof our backend systems and act as a catalyst for our front-end business growth, ensuring I deliver high-impact results in the coming year.
 
-Integrity: upheld the highest ethical and technical standards, maintained full transparency with stakeholders regarding project risks, timelines, and technical trade-offs.
+Option 2: 蓝图行为结构化 (The Blueprint Behaviors Structure)如果你们公司的系统喜欢让你分点列出具体的关注领域（Focus Areas），这种自带“行为准则（Blueprint）”标签的写法最清晰。
 
-Collaboration & Respect: fostered a highly collaborative environment by proactively supporting cross-functional teams during BAU issue resolution. always treat colleagues with respect, valuing diverse perspectives and ensuring all voices are heard during architectural discussions and code reviews.
+To strongly align with our company's strategic doubling-down on AI across all business and IT lines, my future focus areas are built around three core pillars:
 
-Excellence: demonstrated a relentless pursuit of excellence by refusing to settle for the status quo. By driving the Spark 3 modernization and drastically slashing the FCS pipeline's runtime and compute footprint, I continuously pushed the boundaries of our engineering capabilities.
+AI Engineering & Integration: Expand my technical skill set in AI/LLM deployment and integration to robustly support next-generation IT systems.
+
+Data Infrastructure Mastery: Continue to deepen my proficiency in the Databricks and Spark ecosystem, ensuring our foundational data architecture is highly scalable and AI-ready.
+
+Business-Driven Development: Strengthen my understanding of front-end business lines, ensuring that every backend optimization and AI initiative directly translates into tangible business value.
+
+Option 3: 高管视角型 (The Strategic Visionary)更具全局观，强调你不仅是“学习”，更是为了“赋能业务”。
+
+As we continue to embed AI across our front-end products and backend IT infrastructure, my goal is to remain at the forefront of this strategic evolution. My future development will focus on seamlessly integrating AI Engineering with advanced Spark and Databricks data platforms, while continuously sharpening my business acumen. By doing so, I will be better equipped to design intelligent, scalable backend solutions that empower our business lines and drive our long-term AI strategy forward.
