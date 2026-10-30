@@ -138,4 +138,27 @@ spring.main.lazy-initialization=true
 | [ T0 ]  [ T1 ]  [ T2 ]  <-- Dedicated Single Thread Executors |
 +---------------------------------------------------------------+
 
+1. Spark 3 Modernization & Application Refactoring
+
+Goal: Upgrade core applications from Spark 2 to Spark 3 and complete associated architectural refactoring.
+
+Performance Impact: Spearheaded the end-to-end migration of the RDL, EGL, and Reporting Service pipelines from Spark 2 to Spark 3. Proactively identified and resolved critical performance bottlenecks encountered during the version upgrade. Engineered the transition from standard Java serialization to the Kryo serializer, which significantly boosted overall processing throughput and application efficiency.
+
+2. Continuous Performance Tuning of FCS Pipelines
+
+Goal: Drive further performance optimizations and resource efficiency within the FCS processing lifecycle.
+
+Performance Impact: Advanced the ongoing optimization of the FCS data pipeline, compounding the success of last year’s initial runtime reduction (from 6 hours down to 2.5 hours). Slashed the execution time by an additional 50%, bringing the FCS Asia batch processing down to an unprecedented 1–1.5 hours. Simultaneously optimized the compute footprint, cutting memory consumption by over 50% (from 5.2TB down to 2.5TB) without sacrificing stability.
+
+3. Feature Delivery & BAU (Business As Usual) Operational Excellence
+
+Goal: Execute continuous functional deliveries and sustain high-quality BAU operational support.
+
+Performance Impact: Successfully delivered critical functional enhancements mapped to user-requested FED tickets, ensuring alignment with business requirements. Sustained high system reliability by providing robust daily BAU support, rapidly troubleshooting operational incidents, and proactively resolving underlying performance degradations to guarantee uninterrupted operations.
+
+4. Security Posture Fortification & Vulnerability Remediation
+
+Goal: Remediate security defects and vulnerabilities identified by LLM/SAST code scanning tools.
+
+Performance Impact: Fortified the security posture across 6 core applications (including RDL and EGL) by systematically analyzing and patching vulnerabilities surfaced via SAST and LLM-assisted scans. Delivered all remediations strictly on schedule and successfully cleared all subsequent security validation tests, ensuring rigorous compliance with internal security standards.
 
