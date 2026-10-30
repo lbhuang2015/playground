@@ -138,14 +138,12 @@ spring.main.lazy-initialization=true
 | [ T0 ]  [ T1 ]  [ T2 ]  <-- Dedicated Single Thread Executors |
 +---------------------------------------------------------------+
 
-Option 1: 沉稳自信型 (Executive & Impact-Driven)最推荐，充满专业感，适合大多数外企或大厂的绩效总结。
+Over the past year, I have actively embedded our core values into every aspect of my work and technical delivery:
 
-Overall, I have successfully achieved and, in many cases, surpassed my core objectives for the year. I consistently delivered high-quality results across all my projects and BAU responsibilities. I am proud that my continuous efforts and impact were recognized with a Q4 Quarterly Award, and I look forward to building on this momentum in the upcoming year.
+Client First: consistently prioritized end-user impact, ensuring that all functional deliveries directly resolved business pain points and provided a seamless, high-performance experience for our stakeholders.
 
-Option 2: 简练有力型 (Concise & Direct)适合字数受限，或者喜欢直奔主题的风格。
+Integrity: upheld the highest ethical and technical standards, maintained full transparency with stakeholders regarding project risks, timelines, and technical trade-offs.
 
-This year, I achieved and exceeded the majority of my preset performance goals, maintaining a high standard of execution across all deliverables. My dedication and project outcomes were acknowledged with a Q4 Quarterly Award. I am highly satisfied with these results and remain committed to driving further success.
+Collaboration & Respect: fostered a highly collaborative environment by proactively supporting cross-functional teams during BAU issue resolution. always treat colleagues with respect, valuing diverse perspectives and ensuring all voices are heard during architectural discussions and code reviews.
 
-Option 3: 积极进取型 (Growth-Oriented)带有一点对未来的展望，态度非常积极。
-
-I am proud to have delivered strong performance this year, successfully meeting and exceeding most of my predefined targets. Delivering high-quality work has always been my priority, and I was honored to receive a Q4 Quarterly Award in recognition of these contributions. I am energized by these achievements and fully prepared to tackle new challenges ahead.
+Excellence: demonstrated a relentless pursuit of excellence by refusing to settle for the status quo. By driving the Spark 3 modernization and drastically slashing the FCS pipeline's runtime and compute footprint, I continuously pushed the boundaries of our engineering capabilities.
