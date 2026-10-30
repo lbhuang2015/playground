@@ -138,27 +138,14 @@ spring.main.lazy-initialization=true
 | [ T0 ]  [ T1 ]  [ T2 ]  <-- Dedicated Single Thread Executors |
 +---------------------------------------------------------------+
 
-1. Spark 3 Modernization & Application Refactoring
+Option 1: 沉稳自信型 (Executive & Impact-Driven)最推荐，充满专业感，适合大多数外企或大厂的绩效总结。
 
-Goal: Upgrade core applications from Spark 2 to Spark 3 and complete associated architectural refactoring.
+Overall, I have successfully achieved and, in many cases, surpassed my core objectives for the year. I consistently delivered high-quality results across all my projects and BAU responsibilities. I am proud that my continuous efforts and impact were recognized with a Q4 Quarterly Award, and I look forward to building on this momentum in the upcoming year.
 
-Performance Impact: Spearheaded the end-to-end migration of the RDL, EGL, and Reporting Service pipelines from Spark 2 to Spark 3. Proactively identified and resolved critical performance bottlenecks encountered during the version upgrade. Engineered the transition from standard Java serialization to the Kryo serializer, which significantly boosted overall processing throughput and application efficiency.
+Option 2: 简练有力型 (Concise & Direct)适合字数受限，或者喜欢直奔主题的风格。
 
-2. Continuous Performance Tuning of FCS Pipelines
+This year, I achieved and exceeded the majority of my preset performance goals, maintaining a high standard of execution across all deliverables. My dedication and project outcomes were acknowledged with a Q4 Quarterly Award. I am highly satisfied with these results and remain committed to driving further success.
 
-Goal: Drive further performance optimizations and resource efficiency within the FCS processing lifecycle.
+Option 3: 积极进取型 (Growth-Oriented)带有一点对未来的展望，态度非常积极。
 
-Performance Impact: Advanced the ongoing optimization of the FCS data pipeline, compounding the success of last year’s initial runtime reduction (from 6 hours down to 2.5 hours). Slashed the execution time by an additional 50%, bringing the FCS Asia batch processing down to an unprecedented 1–1.5 hours. Simultaneously optimized the compute footprint, cutting memory consumption by over 50% (from 5.2TB down to 2.5TB) without sacrificing stability.
-
-3. Feature Delivery & BAU (Business As Usual) Operational Excellence
-
-Goal: Execute continuous functional deliveries and sustain high-quality BAU operational support.
-
-Performance Impact: Successfully delivered critical functional enhancements mapped to user-requested FED tickets, ensuring alignment with business requirements. Sustained high system reliability by providing robust daily BAU support, rapidly troubleshooting operational incidents, and proactively resolving underlying performance degradations to guarantee uninterrupted operations.
-
-4. Security Posture Fortification & Vulnerability Remediation
-
-Goal: Remediate security defects and vulnerabilities identified by LLM/SAST code scanning tools.
-
-Performance Impact: Fortified the security posture across 6 core applications (including RDL and EGL) by systematically analyzing and patching vulnerabilities surfaced via SAST and LLM-assisted scans. Delivered all remediations strictly on schedule and successfully cleared all subsequent security validation tests, ensuring rigorous compliance with internal security standards.
-
+I am proud to have delivered strong performance this year, successfully meeting and exceeding most of my predefined targets. Delivering high-quality work has always been my priority, and I was honored to receive a Q4 Quarterly Award in recognition of these contributions. I am energized by these achievements and fully prepared to tackle new challenges ahead.
